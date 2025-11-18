@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>通用麻将计分器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            height: 100vh;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .header {
+            display: none;
+        }
+
+        .round-info {
+            display: none;
+        }
+
+        .game-board {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            margin: 0;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        .seat {
+            position: absolute;
+            width: 30vw;
+            max-width: 200px;
+            min-width: 140px;
+            text-align: center;
+            background: white;
+            border-radius: 15px;
+            padding: 18px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 3px solid transparent;
+        }
+
+        .seat.bottom:hover {
+            transform: translateX(-50%) scale(1.05);
+        }
+
+        .seat.top:hover {
+            transform: translateX(-50%) rotate(180deg) scale(1.05);
+        }
+
+        .seat.left:hover {
+            transform: translateY(-50%) rotate(90deg) scale(1.05);
+        }
+
+        .seat.right:hover {
+            transform: translateY(-50%) rotate(-90deg) scale(1.05);
+        }
+
+        .seat.dealer {
+            border-color: #ff6b6b;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffe0e0 100%);
+        }
+
+        .seat.dealer::before {
+            content: '';
+            position: absolute;
+            background: transparent;
+            color: white;
+            width: 0;
+            height: 0;
+            border-radius: 0;
+            font-size: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            z-index: 10;
+        }
+
+        .seat.bottom.dealer::before {
+            top: -12px;
+            right: -12px;
+        }
+
+        .seat.top.dealer::before {
+            bottom: -12px;
+            left: -12px;
+        }
+
+        .seat.left.dealer::before {
+            top: -12px;
+            left: -12px;
+        }
+
+        .seat.right.dealer::before {
+            bottom: -12px;
+            right: -12px;
+        }
+
+        .seat.bottom {
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .seat.top {
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%) rotate(180deg);
+        }
+
+        .seat.left {
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%) rotate(90deg);
+        }
+
+        .seat.right {
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%) rotate(-90deg);
+        }
+
+        .seat-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+
+        .seat-score {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .round-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            width: 120px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            border: 3px solid #667eea;
+            z-index: 10;
+        }
+        
+        .round-center .round-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            white-space: nowrap;
+            text-align: center;
+        }
+        
+        .direction-mark {
+            position: absolute;
+            font-size: 60px;
+            font-weight: bold;
+            color: #667eea;
+            z-index: 5;
+            pointer-events: none;
+        }
+        
+        .direction-mark.bottom {
+            bottom: 50%;
+            left: 50%;
+            transform: translate(-50%, 140px);
+        }
+        
+        .direction-mark.top {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -140px) rotate(180deg);
+        }
+        
+        .direction-mark.left {
+            left: 50%;
+            top: 50%;
+            transform: translate(-140px, -50%) rotate(90deg);
+        }
+        
+        .direction-mark.right {
+            right: 50%;
+            top: 50%;
+            transform: translate(140px, -50%) rotate(-90deg);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            padding: 8px;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            flex: 1;
+            min-width: 80px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-secondary {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn-secondary.blue {
+            background: #667eea;
+        }
+        
+        .btn-secondary.blue:hover {
+            background: #5568d3;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            width: 95%;
+            max-width: 500px;
+            max-height: 95vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #333;
+        }
+
+        .player-list {
+            margin-bottom: 20px;
+        }
+
+        .player-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            background: #f7fafc;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+
+        .player-item:hover {
+            background: #edf2f7;
+            border-color: #667eea;
+        }
+
+        .player-item.selected {
+            background: #667eea;
+            color: white;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .settlement-area {
+            margin-top: 20px;
+        }
+
+        .settlement-item {
+            background: #f7fafc;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .settlement-item .from-to {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .settlement-item .amount {
+            font-size: 18px;
+            color: #667eea;
+        }
+
+        .settlement-item .remove {
+            float: right;
+            background: #e53e3e;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .draggable {
+            cursor: grab;
+        }
+
+        .draggable:active {
+            cursor: grabbing;
+        }
+
+        .drop-zone {
+            border: 2px dashed #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .empty-seat {
+            color: #999;
+            font-style: italic;
+        }
+
+        .settings-list {
+            margin-bottom: 20px;
+        }
+
+        .settings-item {
+            padding: 15px;
+            margin-bottom: 12px;
+            background: #f7fafc;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-left: 4px solid #667eea;
+        }
+
+        .settings-item:hover {
+            background: #edf2f7;
+            transform: translateX(5px);
+        }
+
+        .settings-item-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .settings-item-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .settings-item-desc {
+            font-size: 12px;
+            color: #666;
+        }
+
+        @media (orientation: landscape) {
+            .game-board {
+                padding: 8px;
+            }
+            
+            .seat {
+                width: 25vw;
+                max-width: 220px;
+                min-width: 160px;
+                padding: 20px;
+            }
+            
+            .seat-name {
+                font-size: 20px;
+                margin-bottom: 10px;
+            }
+            
+            .seat-score {
+                font-size: 36px;
+            }
+            
+            .round-center {
+                width: 120px;
+                height: 120px;
+            }
+            
+            .round-center .round-number {
+                font-size: 22px;
+            }
+            
+            .direction-mark {
+                font-size: 56px;
+            }
+            
+            .direction-mark.bottom {
+                transform: translate(-50%, 120px);
+            }
+            
+            .direction-mark.top {
+                transform: translate(-50%, -120px) rotate(180deg);
+            }
+            
+            .direction-mark.left {
+                transform: translate(-120px, -50%) rotate(90deg);
+            }
+            
+            .direction-mark.right {
+                transform: translate(120px, -50%) rotate(-90deg);
+            }
+            
+            .seat.bottom {
+                bottom: 8px;
+            }
+            
+            .seat.top {
+                top: 8px;
+            }
+            
+            .seat.left {
+                left: 8px;
+            }
+            
+            .seat.right {
+                right: 8px;
+            }
+            
+            .button-group {
+                padding: 6px;
+                gap: 6px;
+            }
+            
+            .btn {
+                padding: 10px 16px;
+                font-size: 14px;
+                min-width: 80px;
+            }
+        }
+        
+        /* 针对横屏且宽度较大的情况进一步优化 */
+        @media (orientation: landscape) and (min-width: 800px) {
+            .seat {
+                width: 28vw;
+                max-width: 250px;
+                min-width: 180px;
+                padding: 24px;
+            }
+            
+            .seat-name {
+                font-size: 24px;
+                margin-bottom: 12px;
+            }
+            
+            .seat-score {
+                font-size: 42px;
+            }
+            
+            .round-center {
+                width: 140px;
+                height: 140px;
+            }
+            
+            .round-center .round-number {
+                font-size: 26px;
+            }
+            
+            .direction-mark {
+                font-size: 64px;
+            }
+            
+            .direction-mark.bottom {
+                transform: translate(-50%, 140px);
+            }
+            
+            .direction-mark.top {
+                transform: translate(-50%, -140px) rotate(180deg);
+            }
+            
+            .direction-mark.left {
+                transform: translate(-140px, -50%) rotate(90deg);
+            }
+            
+            .direction-mark.right {
+                transform: translate(140px, -50%) rotate(-90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+        <div class="container">
+        <div class="game-board">
+            <div class="round-center" id="roundCenter">
+                <div class="round-number" id="roundNumberText">第 <span id="roundNumber">1</span> 局</div>
+            </div>
+            <div class="direction-mark bottom" id="direction-0"></div>
+            <div class="direction-mark right" id="direction-1"></div>
+            <div class="direction-mark top" id="direction-2"></div>
+            <div class="direction-mark left" id="direction-3"></div>
+            <div class="seat bottom" data-seat="0" id="seat-0">
+                <div class="seat-name" id="name-0">点击设置玩家</div>
+                <div class="seat-score" id="score-0">0</div>
+            </div>
+            <div class="seat right" data-seat="1" id="seat-1">
+                <div class="seat-name" id="name-1">点击设置玩家</div>
+                <div class="seat-score" id="score-1">0</div>
+            </div>
+            <div class="seat top" data-seat="2" id="seat-2">
+                <div class="seat-name" id="name-2">点击设置玩家</div>
+                <div class="seat-score" id="score-2">0</div>
+            </div>
+            <div class="seat left" data-seat="3" id="seat-3">
+                <div class="seat-name" id="name-3">点击设置玩家</div>
+                <div class="seat-score" id="score-3">0</div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button class="btn btn-primary" id="settleBtn">结算</button>
+            <button class="btn btn-secondary" id="nextRoundBtn">下一局</button>
+            <button class="btn btn-secondary blue" id="settingsBtn">设置</button>
+        </div>
+    </div>
+
+    <!-- 选择玩家模态框 -->
+    <div class="modal" id="playerSelectModal">
+        <div class="modal-content">
+            <div class="modal-title">选择玩家</div>
+            <div class="player-list" id="playerList"></div>
+            <div class="input-group">
+                <label>添加新玩家</label>
+                <input type="text" id="newPlayerName" placeholder="输入玩家名称">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="addPlayerBtn">添加</button>
+                <button class="btn btn-primary" id="selectPlayerBtn">选择</button>
+                <button class="btn btn-primary" id="cancelSelectBtn">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 结算模态框 -->
+    <div class="modal" id="settlementModal">
+        <div class="modal-content">
+            <div class="modal-title">结算</div>
+            <div class="settlement-area" id="settlementArea">
+                <p style="text-align: center; color: #999; margin-bottom: 15px;">
+                    点击玩家选择"从"，再点击另一个玩家选择"到"，或拖动玩家名字
+                </p>
+                <div id="settlementPlayers"></div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="completeSettlementBtn">完成结算</button>
+                <button class="btn btn-primary" id="cancelSettlementBtn">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 输入分数模态框 -->
+    <div class="modal" id="amountModal">
+        <div class="modal-content">
+            <div class="modal-title" id="amountTitle">输入分数</div>
+            <div class="input-group">
+                <label id="amountLabel">从 <span id="fromPlayerName"></span> 给 <span id="toPlayerName"></span></label>
+                <input type="number" id="amountInput" placeholder="输入分数" min="0" step="1">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="confirmAmountBtn">确认</button>
+                <button class="btn btn-primary" id="cancelAmountBtn">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-title">设置</div>
+            <div class="settings-list">
+                <div class="settings-item" id="settingsHistory">
+                    <div class="settings-item-content">
+                        <div class="settings-item-title">历史记录</div>
+                        <div class="settings-item-desc">查看所有结算历史</div>
+                    </div>
+                </div>
+                <div class="settings-item" id="settingsRanking">
+                    <div class="settings-item-content">
+                        <div class="settings-item-title">查看排行榜</div>
+                        <div class="settings-item-desc">按分数从高到低排序</div>
+                    </div>
+                </div>
+                <div class="settings-item" id="settingsClearData" style="border-left-color: #e53e3e;">
+                    <div class="settings-item-content">
+                        <div class="settings-item-title" style="color: #e53e3e;">清空数据</div>
+                        <div class="settings-item-desc" style="color: #999;">删除所有数据（不可恢复）</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" id="closeSettingsBtn">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史记录模态框 -->
+    <div class="modal" id="historyModal">
+        <div class="modal-content">
+            <div class="modal-title">历史记录</div>
+            <div id="historyList" style="max-height: 60vh; overflow-y: auto; margin-bottom: 15px;"></div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" id="closeHistoryBtn">关闭</button>
+                <button class="btn btn-secondary" id="clearHistoryBtn" style="background: #e53e3e;">清空记录</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 排行榜模态框 -->
+    <div class="modal" id="rankingModal">
+        <div class="modal-content">
+            <div class="modal-title">排行榜</div>
+            <div id="rankingList" style="max-height: 60vh; overflow-y: auto; margin-bottom: 15px;"></div>
+            <div class="modal-buttons">
+                <button class="btn btn-primary" id="closeRankingBtn">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 数据管理
+        const gameState = {
+            players: [], // 所有玩家列表 {name: string, score: number}
+            seats: [null, null, null, null], // 4个座位，存储玩家名称
+            currentRound: 1,
+            dealerIndex: 0, // 庄家座位索引
+            selectedSeat: null, // 当前选择的座位
+            selectedPlayer: null, // 当前选择的玩家（用于结算）
+            settlementTransactions: [], // 结算交易 [{from: string, to: string, amount: number}]
+            dragSource: null, // 拖拽源
+            settlementFrom: null, // 结算时选择的"从"玩家
+            history: [] // 历史记录 [{time: number, round: number, transactions: [{from: string, to: string, amount: number}]}]
+        };
+
+        // 初始化
+        function init() {
+            // 绑定事件
+            document.querySelectorAll('.seat').forEach(seat => {
+                seat.addEventListener('click', handleSeatClick);
+            });
+
+            document.getElementById('settleBtn').addEventListener('click', openSettlementModal);
+            document.getElementById('nextRoundBtn').addEventListener('click', nextRound);
+            document.getElementById('addPlayerBtn').addEventListener('click', addPlayer);
+            document.getElementById('selectPlayerBtn').addEventListener('click', selectPlayer);
+            document.getElementById('cancelSelectBtn').addEventListener('click', closePlayerSelectModal);
+            document.getElementById('completeSettlementBtn').addEventListener('click', completeSettlement);
+            document.getElementById('cancelSettlementBtn').addEventListener('click', closeSettlementModal);
+            document.getElementById('confirmAmountBtn').addEventListener('click', confirmAmount);
+            document.getElementById('cancelAmountBtn').addEventListener('click', closeAmountModal);
+            document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
+            document.getElementById('closeSettingsBtn').addEventListener('click', closeSettingsModal);
+            document.getElementById('settingsHistory').addEventListener('click', () => {
+                closeSettingsModal();
+                setTimeout(() => openHistoryModal(), 200);
+            });
+            document.getElementById('settingsRanking').addEventListener('click', () => {
+                closeSettingsModal();
+                setTimeout(() => openRankingModal(), 200);
+            });
+            document.getElementById('settingsClearData').addEventListener('click', () => {
+                closeSettingsModal();
+                setTimeout(() => clearAllData(), 200);
+            });
+            document.getElementById('closeHistoryBtn').addEventListener('click', closeHistoryModal);
+            document.getElementById('clearHistoryBtn').addEventListener('click', clearHistory);
+            document.getElementById('closeRankingBtn').addEventListener('click', closeRankingModal);
+            document.getElementById('newPlayerName').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    addPlayer();
+                }
+            });
+
+            // 加载保存的数据
+            loadGameState();
+            updateDisplay();
+        }
+
+        // 座位点击事件
+        function handleSeatClick(e) {
+            const seatElement = e.currentTarget;
+            const seatIndex = parseInt(seatElement.dataset.seat);
+            gameState.selectedSeat = seatIndex;
+            openPlayerSelectModal();
+        }
+
+        // 打开选择玩家模态框
+        function openPlayerSelectModal() {
+            const modal = document.getElementById('playerSelectModal');
+            const playerList = document.getElementById('playerList');
+            playerList.innerHTML = '';
+
+            // 获取当前选择的座位索引
+            const selectedSeatIndex = gameState.selectedSeat;
+
+            // 显示所有玩家，但过滤掉已经在其他座位上的玩家
+            gameState.players.forEach((player, index) => {
+                // 检查该玩家是否已经在其他座位上
+                const isOnSeat = gameState.seats.some((seatPlayer, seatIndex) => {
+                    return seatPlayer === player.name && seatIndex !== selectedSeatIndex;
+                });
+
+                // 如果玩家已经在其他座位上，跳过
+                if (isOnSeat) {
+                    return;
+                }
+
+                const item = document.createElement('div');
+                item.className = 'player-item';
+                item.textContent = `${player.name} (${player.score}分)`;
+                item.dataset.index = index;
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('.player-item').forEach(i => i.classList.remove('selected'));
+                    item.classList.add('selected');
+                    gameState.selectedPlayer = index;
+                });
+                playerList.appendChild(item);
+            });
+
+            modal.classList.add('active');
+        }
+
+        // 关闭选择玩家模态框
+        function closePlayerSelectModal() {
+            document.getElementById('playerSelectModal').classList.remove('active');
+            gameState.selectedSeat = null;
+            gameState.selectedPlayer = null;
+            document.getElementById('newPlayerName').value = '';
+        }
+
+        // 添加玩家
+        function addPlayer() {
+            const input = document.getElementById('newPlayerName');
+            const name = input.value.trim();
+            
+            if (!name) {
+                alert('请输入玩家名称');
+                return;
+            }
+
+            // 检查是否已存在
+            if (gameState.players.some(p => p.name === name)) {
+                alert('该玩家已存在');
+                return;
+            }
+
+            gameState.players.push({ name, score: 0 });
+            input.value = '';
+            saveGameState();
+            openPlayerSelectModal(); // 刷新列表
+        }
+
+        // 选择玩家
+        function selectPlayer() {
+            if (gameState.selectedPlayer === null) {
+                alert('请选择一个玩家或添加新玩家');
+                return;
+            }
+
+            const seatIndex = gameState.selectedSeat;
+            const playerIndex = gameState.selectedPlayer;
+            const player = gameState.players[playerIndex];
+
+            // 设置座位
+            gameState.seats[seatIndex] = player.name;
+            
+            closePlayerSelectModal();
+            updateDisplay();
+            saveGameState();
+        }
+
+        // 更新显示
+        function updateDisplay() {
+            // 更新座位显示
+            for (let i = 0; i < 4; i++) {
+                const seatElement = document.getElementById(`seat-${i}`);
+                const nameElement = document.getElementById(`name-${i}`);
+                const scoreElement = document.getElementById(`score-${i}`);
+                
+                const playerName = gameState.seats[i];
+                
+                if (playerName) {
+                    const player = gameState.players.find(p => p.name === playerName);
+                    if (player) {
+                        nameElement.textContent = player.name;
+                        scoreElement.textContent = player.score;
+                        nameElement.classList.remove('empty-seat');
+                    } else {
+                        nameElement.textContent = '点击设置玩家';
+                        nameElement.classList.add('empty-seat');
+                        scoreElement.textContent = '0';
+                    }
+                } else {
+                    nameElement.textContent = '点击设置玩家';
+                    nameElement.classList.add('empty-seat');
+                    scoreElement.textContent = '0';
+                }
+
+                // 更新庄家标记
+                if (i === gameState.dealerIndex) {
+                    seatElement.classList.add('dealer');
+                } else {
+                    seatElement.classList.remove('dealer');
+                }
+            }
+
+            // 更新局数
+            document.getElementById('roundNumber').textContent = gameState.currentRound;
+            
+            // 更新局数框的旋转角度，使其正对庄家
+            updateRoundCenterRotation();
+            
+            // 更新方向标记
+            updateDirectionMarks();
+        }
+        
+        // 更新中间局数框的旋转角度
+        function updateRoundCenterRotation() {
+            const roundCenter = document.getElementById('roundCenter');
+            if (!roundCenter) return;
+            
+            // 根据庄家位置计算旋转角度
+            // 座位0（bottom）：0度
+            // 座位1（right）：-90度（逆时针90度）
+            // 座位2（top）：180度
+            // 座位3（left）：90度（顺时针90度）
+            let rotation = 0;
+            switch(gameState.dealerIndex) {
+                case 0: // bottom
+                    rotation = 0;
+                    break;
+                case 1: // right
+                    rotation = -90;
+                    break;
+                case 2: // top
+                    rotation = 180;
+                    break;
+                case 3: // left
+                    rotation = 90;
+                    break;
+            }
+            
+            roundCenter.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
+        }
+        
+        // 更新方向标记
+        function updateDirectionMarks() {
+            const directions = ['東', '南', '西', '北'];
+            
+            // 根据庄家位置计算每个座位的方向
+            // 庄家永远是東，逆时针依次是南、西、北
+            for (let i = 0; i < 4; i++) {
+                const directionElement = document.getElementById(`direction-${i}`);
+                if (!directionElement) continue;
+                
+                // 计算方向：(座位索引 - 庄家索引 + 4) % 4
+                const directionIndex = (i - gameState.dealerIndex + 4) % 4;
+                directionElement.textContent = directions[directionIndex];
+                
+                // 如果是"東"（方向索引为0），设置为红色，否则保持蓝色
+                if (directionIndex === 0) {
+                    directionElement.style.color = '#ff6b6b';
+                } else {
+                    directionElement.style.color = '#667eea';
+                }
+            }
+        }
+
+        // 下一局
+        function nextRound() {
+            // 检查是否有玩家在座位上
+            const hasPlayers = gameState.seats.some(name => name !== null);
+            if (!hasPlayers) {
+                alert('请先设置玩家');
+                return;
+            }
+
+            // 检查当前局是否有结算记录
+            const hasSettlement = gameState.history.some(entry => entry.round === gameState.currentRound);
+            
+            // 如果没有结算记录，弹出确认提示
+            if (!hasSettlement) {
+                if (!confirm('你没有做任何结算，是否确定要进入下一局？')) {
+                    return;
+                }
+            }
+
+            // 庄家逆时针轮换（座位索引 +1，模4）
+            gameState.dealerIndex = (gameState.dealerIndex + 1) % 4;
+            gameState.currentRound++;
+            
+            updateDisplay();
+            saveGameState();
+        }
+
+        // 打开结算模态框
+        function openSettlementModal() {
+            const modal = document.getElementById('settlementModal');
+            const playersArea = document.getElementById('settlementPlayers');
+            playersArea.innerHTML = '';
+
+            // 重置结算交易和状态
+            gameState.settlementTransactions = [];
+            gameState.settlementFrom = null;
+            gameState.dragSource = null;
+
+            // 显示当前座位上的玩家
+            const currentPlayers = [];
+            for (let i = 0; i < 4; i++) {
+                const playerName = gameState.seats[i];
+                if (playerName) {
+                    const player = gameState.players.find(p => p.name === playerName);
+                    if (player) {
+                        currentPlayers.push({ name: playerName, seat: i });
+                    }
+                }
+            }
+
+            if (currentPlayers.length === 0) {
+                alert('请先设置玩家');
+                return;
+            }
+
+            // 创建可拖拽和点击的玩家列表
+            createSettlementPlayersList(currentPlayers, playersArea);
+
+            // 显示已有交易（如果有）
+            updateSettlementDisplay();
+
+            modal.classList.add('active');
+        }
+
+        // 创建结算玩家列表
+        function createSettlementPlayersList(currentPlayers, playersArea) {
+            currentPlayers.forEach(({ name, seat }) => {
+                const item = document.createElement('div');
+                item.className = 'player-item draggable';
+                const player = gameState.players.find(p => p.name === name);
+                item.textContent = `${name} (${player ? player.score : 0}分)`;
+                item.dataset.player = name;
+                item.draggable = true;
+                
+                // 拖拽事件（桌面端）
+                item.addEventListener('dragstart', (e) => {
+                    gameState.dragSource = name;
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                });
+
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const targetName = e.currentTarget.dataset.player;
+                    if (gameState.dragSource && gameState.dragSource !== targetName) {
+                        openAmountModal(gameState.dragSource, targetName);
+                        gameState.dragSource = null;
+                    }
+                });
+
+                // 点击事件（移动端）
+                item.addEventListener('click', () => {
+                    if (!gameState.settlementFrom) {
+                        // 选择"从"玩家
+                        gameState.settlementFrom = name;
+                        document.querySelectorAll('#settlementPlayers .player-item').forEach(i => {
+                            i.classList.remove('selected');
+                            if (i.dataset.player === name) {
+                                i.classList.add('selected');
+                            }
+                        });
+                    } else if (gameState.settlementFrom === name) {
+                        // 取消选择
+                        gameState.settlementFrom = null;
+                        item.classList.remove('selected');
+                    } else {
+                        // 选择"到"玩家
+                        openAmountModal(gameState.settlementFrom, name);
+                        gameState.settlementFrom = null;
+                        document.querySelectorAll('#settlementPlayers .player-item').forEach(i => {
+                            i.classList.remove('selected');
+                        });
+                    }
+                });
+
+                playersArea.appendChild(item);
+            });
+        }
+
+        // 更新结算显示
+        function updateSettlementDisplay() {
+            const area = document.getElementById('settlementArea');
+            if (!area) return;
+            
+            // 清除旧的交易显示（保留提示文字和玩家列表）
+            const existingTransactions = area.querySelectorAll('.settlement-item');
+            existingTransactions.forEach(item => {
+                item.remove();
+            });
+
+            // 显示所有交易
+            if (gameState.settlementTransactions.length > 0) {
+                const transactionsContainer = document.createElement('div');
+                transactionsContainer.style.marginTop = '15px';
+                transactionsContainer.style.marginBottom = '15px';
+                
+                gameState.settlementTransactions.forEach((transaction, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'settlement-item';
+                    item.innerHTML = `
+                        <div class="from-to">${transaction.from} → ${transaction.to}</div>
+                        <div class="amount">${transaction.amount} 分</div>
+                        <button class="remove" data-index="${index}">删除</button>
+                    `;
+                    
+                    item.querySelector('.remove').addEventListener('click', () => {
+                        gameState.settlementTransactions.splice(index, 1);
+                        updateSettlementDisplay();
+                    });
+
+                    transactionsContainer.appendChild(item);
+                });
+                
+                // 插入到玩家列表之后
+                const playersArea = document.getElementById('settlementPlayers');
+                if (playersArea && playersArea.parentNode) {
+                    playersArea.parentNode.insertBefore(transactionsContainer, playersArea.nextSibling);
+                }
+            }
+        }
+
+        // 打开输入分数模态框
+        function openAmountModal(from, to) {
+            document.getElementById('fromPlayerName').textContent = from;
+            document.getElementById('toPlayerName').textContent = to;
+            document.getElementById('amountInput').value = '';
+            document.getElementById('amountModal').classList.add('active');
+        }
+
+        // 关闭输入分数模态框
+        function closeAmountModal() {
+            document.getElementById('amountModal').classList.remove('active');
+            gameState.dragSource = null;
+        }
+
+        // 确认分数
+        function confirmAmount() {
+            const amount = parseInt(document.getElementById('amountInput').value);
+            const from = document.getElementById('fromPlayerName').textContent;
+            const to = document.getElementById('toPlayerName').textContent;
+
+            if (isNaN(amount) || amount < 0) {
+                alert('请输入有效的分数');
+                return;
+            }
+
+            if (amount === 0) {
+                closeAmountModal();
+                return;
+            }
+
+            // 添加到交易列表
+            gameState.settlementTransactions.push({ from, to, amount });
+            updateSettlementDisplay();
+            closeAmountModal();
+        }
+
+        // 完成结算
+        function completeSettlement() {
+            if (gameState.settlementTransactions.length === 0) {
+                alert('请至少添加一笔交易');
+                return;
+            }
+
+            // 应用所有交易
+            gameState.settlementTransactions.forEach(transaction => {
+                const fromPlayer = gameState.players.find(p => p.name === transaction.from);
+                const toPlayer = gameState.players.find(p => p.name === transaction.to);
+                
+                if (fromPlayer && toPlayer) {
+                    fromPlayer.score -= transaction.amount;
+                    toPlayer.score += transaction.amount;
+                }
+            });
+
+            // 记录到历史
+            const historyEntry = {
+                time: Date.now(),
+                round: gameState.currentRound,
+                transactions: [...gameState.settlementTransactions]
+            };
+            gameState.history.unshift(historyEntry); // 添加到开头，最新的在前面
+
+            // 清空交易列表
+            gameState.settlementTransactions = [];
+            
+            closeSettlementModal();
+            updateDisplay();
+            saveGameState();
+        }
+
+        // 关闭结算模态框
+        function closeSettlementModal() {
+            document.getElementById('settlementModal').classList.remove('active');
+            gameState.settlementTransactions = [];
+            gameState.dragSource = null;
+            gameState.settlementFrom = null;
+        }
+
+        // 打开历史记录模态框
+        function openHistoryModal() {
+            const modal = document.getElementById('historyModal');
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = '';
+
+            if (gameState.history.length === 0) {
+                historyList.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">暂无历史记录</p>';
+                modal.classList.add('active');
+                return;
+            }
+
+            // 显示所有历史记录
+            gameState.history.forEach((entry, index) => {
+                const item = document.createElement('div');
+                item.className = 'settlement-item';
+                item.style.marginBottom = '15px';
+
+                // 格式化时间
+                const date = new Date(entry.time);
+                const timeStr = date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                let transactionsHtml = '';
+                entry.transactions.forEach(trans => {
+                    transactionsHtml += `
+                        <div style="padding: 5px 0; border-bottom: 1px solid #eee;">
+                            <span style="color: #e53e3e;">${trans.from}</span> → 
+                            <span style="color: #48bb78;">${trans.to}</span>: 
+                            <strong style="color: #667eea;">${trans.amount} 分</strong>
+                        </div>
+                    `;
+                });
+
+                item.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div>
+                            <strong style="color: #333;">第 ${entry.round} 局</strong>
+                        </div>
+                        <div style="font-size: 12px; color: #666;">${timeStr}</div>
+                    </div>
+                    <div style="background: #f7fafc; padding: 10px; border-radius: 5px;">
+                        ${transactionsHtml}
+                    </div>
+                `;
+
+                historyList.appendChild(item);
+            });
+
+            modal.classList.add('active');
+        }
+
+        // 关闭历史记录模态框
+        function closeHistoryModal() {
+            document.getElementById('historyModal').classList.remove('active');
+        }
+
+        // 清空历史记录
+        function clearHistory() {
+            if (confirm('确定要清空所有历史记录吗？此操作不可恢复。')) {
+                gameState.history = [];
+                saveGameState();
+                openHistoryModal(); // 刷新显示
+            }
+        }
+
+        // 打开设置模态框
+        function openSettingsModal() {
+            document.getElementById('settingsModal').classList.add('active');
+        }
+
+        // 关闭设置模态框
+        function closeSettingsModal() {
+            document.getElementById('settingsModal').classList.remove('active');
+        }
+
+        // 打开排行榜模态框
+        function openRankingModal() {
+            const modal = document.getElementById('rankingModal');
+            const rankingList = document.getElementById('rankingList');
+            rankingList.innerHTML = '';
+
+            if (gameState.players.length === 0) {
+                rankingList.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">暂无玩家数据</p>';
+                modal.classList.add('active');
+                return;
+            }
+
+            // 按分数从高到低排序
+            const sortedPlayers = [...gameState.players].sort((a, b) => b.score - a.score);
+
+            sortedPlayers.forEach((player, index) => {
+                const item = document.createElement('div');
+                item.className = 'settlement-item';
+                item.style.marginBottom = '12px';
+                item.style.display = 'flex';
+                item.style.alignItems = 'center';
+                item.style.justifyContent = 'space-between';
+                item.style.padding = '15px';
+
+                // 排名图标
+                let rankIcon = '';
+                let rankColor = '#667eea';
+                if (index === 0) {
+                    rankIcon = '🥇';
+                    rankColor = '#ffd700';
+                } else if (index === 1) {
+                    rankIcon = '🥈';
+                    rankColor = '#c0c0c0';
+                } else if (index === 2) {
+                    rankIcon = '🥉';
+                    rankColor = '#cd7f32';
+                }
+
+                item.innerHTML = `
+                    <div style="display: flex; align-items: center; flex: 1;">
+                        <div style="font-size: 24px; margin-right: 15px; width: 30px; text-align: center;">${rankIcon || (index + 1)}</div>
+                        <div>
+                            <div style="font-size: 18px; font-weight: bold; color: #333;">${player.name}</div>
+                            <div style="font-size: 12px; color: #666;">${index === 0 ? '最高分' : ''}</div>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 24px; font-weight: bold; color: ${rankColor};">${player.score}</div>
+                        <div style="font-size: 12px; color: #666;">分</div>
+                    </div>
+                `;
+
+                rankingList.appendChild(item);
+            });
+
+            modal.classList.add('active');
+        }
+
+        // 关闭排行榜模态框
+        function closeRankingModal() {
+            document.getElementById('rankingModal').classList.remove('active');
+        }
+
+        // 清空所有数据
+        function clearAllData() {
+            if (confirm('确定要清空所有数据吗？包括玩家、分数、历史记录等所有信息都将被删除，此操作不可恢复！')) {
+                // 清空本地存储
+                localStorage.removeItem('mahjongScoreGameState');
+                
+                // 重置游戏状态
+                gameState.players = [];
+                gameState.seats = [null, null, null, null];
+                gameState.currentRound = 1;
+                gameState.dealerIndex = 0;
+                gameState.history = [];
+                gameState.settlementTransactions = [];
+                
+                // 更新显示
+                updateDisplay();
+                
+                alert('所有数据已清空！');
+            }
+        }
+
+        // 保存游戏状态
+        function saveGameState() {
+            localStorage.setItem('mahjongScoreGameState', JSON.stringify(gameState));
+        }
+
+        // 加载游戏状态
+        function loadGameState() {
+            const saved = localStorage.getItem('mahjongScoreGameState');
+            if (saved) {
+                const savedState = JSON.parse(saved);
+                gameState.players = savedState.players || [];
+                gameState.seats = savedState.seats || [null, null, null, null];
+                gameState.currentRound = savedState.currentRound || 1;
+                gameState.dealerIndex = savedState.dealerIndex || 0;
+                gameState.history = savedState.history || [];
+            }
+        }
+
+        // 初始化
+        init();
+    </script>
+</body>
+</html>
