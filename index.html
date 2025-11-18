@@ -62,6 +62,13 @@
             transition: all 0.3s ease;
             border: 3px solid transparent;
         }
+        
+        .seat.left,
+        .seat.right {
+            width: 20vw;
+            max-width: 150px;
+            min-width: 100px;
+        }
 
         .seat.bottom:hover {
             transform: translateX(-50%) scale(1.05);
@@ -192,28 +199,32 @@
             pointer-events: none;
         }
         
+        /* 底部座位（座位0）：右下角，不旋转 */
         .direction-mark.bottom {
-            bottom: 50%;
-            left: 50%;
-            transform: translate(-50%, 140px);
+            bottom: 10px;
+            right: 10px;
+            transform: none;
         }
         
-        .direction-mark.top {
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -140px) rotate(180deg);
-        }
-        
-        .direction-mark.left {
-            left: 50%;
-            top: 50%;
-            transform: translate(-140px, -50%) rotate(90deg);
-        }
-        
+        /* 右侧座位（座位1）：右上角，逆时针90度 */
         .direction-mark.right {
-            right: 50%;
-            top: 50%;
-            transform: translate(140px, -50%) rotate(-90deg);
+            top: 10px;
+            right: 10px;
+            transform: rotate(-90deg);
+        }
+        
+        /* 顶部座位（座位2）：左上角，180度 */
+        .direction-mark.top {
+            top: 10px;
+            left: 10px;
+            transform: rotate(180deg);
+        }
+        
+        /* 左侧座位（座位3）：左下角，顺时针90度 */
+        .direction-mark.left {
+            bottom: 10px;
+            left: 10px;
+            transform: rotate(90deg);
         }
 
         .button-group {
@@ -446,6 +457,100 @@
             color: #666;
         }
 
+        /* 竖屏模式优化 */
+        @media (orientation: portrait) {
+            .game-board {
+                padding: 15px;
+            }
+            
+            .seat {
+                width: 35vw;
+                max-width: 160px;
+                min-width: 100px;
+                padding: 15px;
+            }
+            
+            .seat-name {
+                font-size: 16px;
+                margin-bottom: 8px;
+            }
+            
+            .seat-score {
+                font-size: 28px;
+            }
+            
+            .round-center {
+                width: 100px;
+                height: 100px;
+            }
+            
+            .round-center .round-number {
+                font-size: 18px;
+            }
+            
+            .direction-mark {
+                font-size: 48px;
+            }
+            
+            .direction-mark.bottom {
+                bottom: 15px;
+                right: 15px;
+                transform: none;
+            }
+            
+            .direction-mark.top {
+                top: 15px;
+                left: 15px;
+                transform: rotate(180deg);
+            }
+            
+            .direction-mark.left {
+                bottom: 15px;
+                left: 15px;
+                transform: rotate(90deg);
+            }
+            
+            .direction-mark.right {
+                top: 15px;
+                right: 15px;
+                transform: rotate(-90deg);
+            }
+            
+            .seat.bottom {
+                bottom: 15px;
+            }
+            
+            .seat.top {
+                top: 15px;
+            }
+            
+            .seat.left {
+                left: 15px;
+            }
+            
+            .seat.right {
+                right: 15px;
+            }
+            
+            .seat.left,
+            .seat.right {
+                width: 18vw;
+                max-width: 120px;
+                min-width: 80px;
+            }
+            
+            .button-group {
+                padding: 10px;
+                gap: 8px;
+            }
+            
+            .btn {
+                padding: 12px 18px;
+                font-size: 14px;
+                min-width: 90px;
+            }
+        }
+
         @media (orientation: landscape) {
             .game-board {
                 padding: 8px;
@@ -456,6 +561,13 @@
                 max-width: 220px;
                 min-width: 160px;
                 padding: 20px;
+            }
+            
+            .seat.left,
+            .seat.right {
+                width: 18vw;
+                max-width: 150px;
+                min-width: 100px;
             }
             
             .seat-name {
@@ -481,19 +593,27 @@
             }
             
             .direction-mark.bottom {
-                transform: translate(-50%, 120px);
+                bottom: 8px;
+                right: 8px;
+                transform: none;
             }
             
             .direction-mark.top {
-                transform: translate(-50%, -120px) rotate(180deg);
+                top: 8px;
+                left: 8px;
+                transform: rotate(180deg);
             }
             
             .direction-mark.left {
-                transform: translate(-120px, -50%) rotate(90deg);
+                bottom: 8px;
+                left: 8px;
+                transform: rotate(90deg);
             }
             
             .direction-mark.right {
-                transform: translate(120px, -50%) rotate(-90deg);
+                top: 8px;
+                right: 8px;
+                transform: rotate(-90deg);
             }
             
             .seat.bottom {
@@ -533,6 +653,13 @@
                 padding: 24px;
             }
             
+            .seat.left,
+            .seat.right {
+                width: 20vw;
+                max-width: 180px;
+                min-width: 120px;
+            }
+            
             .seat-name {
                 font-size: 24px;
                 margin-bottom: 12px;
@@ -556,19 +683,27 @@
             }
             
             .direction-mark.bottom {
-                transform: translate(-50%, 140px);
+                bottom: 8px;
+                right: 8px;
+                transform: none;
             }
             
             .direction-mark.top {
-                transform: translate(-50%, -140px) rotate(180deg);
+                top: 8px;
+                left: 8px;
+                transform: rotate(180deg);
             }
             
             .direction-mark.left {
-                transform: translate(-140px, -50%) rotate(90deg);
+                bottom: 8px;
+                left: 8px;
+                transform: rotate(90deg);
             }
             
             .direction-mark.right {
-                transform: translate(140px, -50%) rotate(-90deg);
+                top: 8px;
+                right: 8px;
+                transform: rotate(-90deg);
             }
         }
     </style>
@@ -1025,6 +1160,15 @@
 
         // 创建结算玩家列表
         function createSettlementPlayersList(currentPlayers, playersArea) {
+            // 用于跟踪触摸拖动
+            const touchState = {
+                startElement: null,
+                startTime: 0,
+                startX: 0,
+                startY: 0,
+                isDragging: false
+            };
+            
             currentPlayers.forEach(({ name, seat }) => {
                 const item = document.createElement('div');
                 item.className = 'player-item draggable';
@@ -1053,28 +1197,111 @@
                     }
                 });
 
-                // 点击事件（移动端）
-                item.addEventListener('click', () => {
-                    if (!gameState.settlementFrom) {
-                        // 选择"从"玩家
-                        gameState.settlementFrom = name;
-                        document.querySelectorAll('#settlementPlayers .player-item').forEach(i => {
-                            i.classList.remove('selected');
-                            if (i.dataset.player === name) {
-                                i.classList.add('selected');
+                // 触摸事件（移动端拖动）
+                item.addEventListener('touchstart', (e) => {
+                    const touch = e.touches[0];
+                    touchState.startElement = item;
+                    touchState.startTime = Date.now();
+                    touchState.startX = touch.clientX;
+                    touchState.startY = touch.clientY;
+                    touchState.isDragging = false;
+                    gameState.dragSource = name;
+                }, { passive: true });
+
+                item.addEventListener('touchmove', (e) => {
+                    if (touchState.startElement === item) {
+                        const touch = e.touches[0];
+                        const deltaX = Math.abs(touch.clientX - touchState.startX);
+                        const deltaY = Math.abs(touch.clientY - touchState.startY);
+                        
+                        // 如果移动距离超过10px，认为是拖动
+                        if (deltaX > 10 || deltaY > 10) {
+                            touchState.isDragging = true;
+                            e.preventDefault();
+                            
+                            // 找到触摸点下的元素
+                            const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+                            if (elementBelow) {
+                                // 清除之前的 drop-zone
+                                document.querySelectorAll('.player-item').forEach(i => {
+                                    i.classList.remove('drop-zone');
+                                });
+                                
+                                const targetItem = elementBelow.closest('.player-item');
+                                if (targetItem && targetItem !== item) {
+                                    targetItem.classList.add('drop-zone');
+                                }
                             }
+                        }
+                    }
+                }, { passive: false });
+
+                item.addEventListener('touchend', (e) => {
+                    if (touchState.startElement === item) {
+                        // 清除所有 drop-zone 标记
+                        document.querySelectorAll('.player-item').forEach(i => {
+                            i.classList.remove('drop-zone');
                         });
-                    } else if (gameState.settlementFrom === name) {
-                        // 取消选择
-                        gameState.settlementFrom = null;
-                        item.classList.remove('selected');
-                    } else {
-                        // 选择"到"玩家
-                        openAmountModal(gameState.settlementFrom, name);
-                        gameState.settlementFrom = null;
-                        document.querySelectorAll('#settlementPlayers .player-item').forEach(i => {
-                            i.classList.remove('selected');
+                        
+                        if (touchState.isDragging) {
+                            // 如果是拖动操作
+                            e.preventDefault();
+                            const touch = e.changedTouches[0];
+                            const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+                            
+                            if (elementBelow) {
+                                const targetItem = elementBelow.closest('.player-item');
+                                if (targetItem && targetItem !== item && gameState.dragSource) {
+                                    const targetName = targetItem.dataset.player;
+                                    if (gameState.dragSource !== targetName) {
+                                        openAmountModal(gameState.dragSource, targetName);
+                                    }
+                                }
+                            }
+                        } else {
+                            // 如果是点击操作（没有拖动）
+                            const touchDuration = Date.now() - touchState.startTime;
+                            if (touchDuration < 500) {
+                                // 点击选择逻辑
+                                if (!gameState.settlementFrom) {
+                                    // 选择"从"玩家
+                                    gameState.settlementFrom = name;
+                                    document.querySelectorAll('#settlementPlayers .player-item').forEach(i => {
+                                        i.classList.remove('selected');
+                                        if (i.dataset.player === name) {
+                                            i.classList.add('selected');
+                                        }
+                                    });
+                                } else if (gameState.settlementFrom === name) {
+                                    // 取消选择
+                                    gameState.settlementFrom = null;
+                                    item.classList.remove('selected');
+                                } else {
+                                    // 选择"到"玩家
+                                    openAmountModal(gameState.settlementFrom, name);
+                                    gameState.settlementFrom = null;
+                                    document.querySelectorAll('#settlementPlayers .player-item').forEach(i => {
+                                        i.classList.remove('selected');
+                                    });
+                                }
+                            }
+                        }
+                        
+                        // 重置状态
+                        touchState.startElement = null;
+                        touchState.isDragging = false;
+                        gameState.dragSource = null;
+                    }
+                }, { passive: false });
+
+                item.addEventListener('touchcancel', () => {
+                    if (touchState.startElement === item) {
+                        document.querySelectorAll('.player-item').forEach(i => {
+                            i.classList.remove('drop-zone');
                         });
+                        touchState.startElement = null;
+                        touchState.isDragging = false;
+                        gameState.dragSource = null;
                     }
                 });
 
