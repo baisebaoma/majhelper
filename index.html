@@ -382,11 +382,11 @@
         </div>
 
         <!-- 8. 操作说明模态框 -->
-        <div class="modal-overlay" :class="{ show: modals.help }" @click="closeModal('help')">
-            <div class="modal-card" @click.stop>
-                <div class="modal-title">操作说明</div>
-                <div class="help-section">
-                    <div style="font-size: 14px; line-height: 1.6; opacity: 0.8;">
+        <div class="modal-overlay help-modal" :class="{ show: modals.help }" @click="closeModal('help')">
+            <div class="modal-card" @click.stop style="max-height: calc(100vh - 280px); display: flex; flex-direction: column;">
+                <div class="modal-title" style="flex-shrink: 0;">操作说明</div>
+                <div class="help-section" style="flex: 1; overflow-y: auto; min-height: 0; padding: 12px; margin-bottom: 8px;">
+                    <div style="font-size: 13px; line-height: 1.5; opacity: 0.8;">
                         <div style="margin-bottom: 8px;">
                             <strong>📊 局数与连庄：</strong>中间风盘数字表示当前第几局；庄家右上角显示皇冠表示首次当庄，显示数字表示连庄次数（如显示1表示连庄1次，即第2次当庄）
                         </div>
@@ -405,15 +405,15 @@
                         <div style="margin-bottom: 8px;">
                             <strong>🎲 打骰子：</strong>点击中间圆盘进入骰子模式，再次点击进行掷骰子
                         </div>
-                        <div>
+                        <div style="margin-bottom: 8px;">
                             <strong>↩️ 撤销操作：</strong>点击"撤销"按钮可撤销上一次结算
                         </div>
-                        <div>
-                            <strong>🔒 锁定/解锁：</strong>点击顶部锁形图标可锁定界面，防止误触。
+                        <div style="margin-bottom: 8px;">
+                            <strong>🔒 锁定/解锁：</strong>点击顶部锁形图标可锁定界面，防止误触
                         </div>
                     </div>
                 </div>
-                <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" @click="closeModal('help')">
+                <button class="btn btn-primary" style="width: 100%; margin-top: 16px; flex-shrink: 0;" @click="closeModal('help')">
                     <i class="fas fa-check"></i> 关闭
                 </button>
             </div>
