@@ -693,74 +693,115 @@
             border-color: #4b5563;
         }
         
-        /* 快速结算背景遮罩 */
-        .quick-settle-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-            z-index: 199;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s;
-        }
-        .quick-settle-overlay.show {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        
-        /* 快速结算输入框 */
-        .quick-settle-modal {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0.9);
-            background: white;
-            border-radius: 24px;
-            padding: 32px 24px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-            z-index: 200;
-            min-width: 300px;
-            opacity: 0;
-            pointer-events: none;
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        body.dark .quick-settle-modal { background: #1f2937; border: 1px solid rgba(255,255,255,0.1); }
-        .quick-settle-modal.show {
-            opacity: 1;
-            pointer-events: auto;
-            transform: translate(-50%, -50%) scale(1);
-        }
-        
-        .quick-settle-title {
-            font-size: 18px;
-            font-weight: 600;
-            text-align: center;
-            margin-bottom: 20px;
-            line-height: 1.4;
-        }
-        
-        .quick-settle-amount {
-            width: 100%;
+        /* Numeric Keypad & Settle Modal Styles */
+        .calc-display {
+            background: var(--bg-light);
             padding: 16px;
-            border-radius: 16px;
-            border: 3px solid var(--primary);
-            background: #f9fafb;
-            font-size: 32px;
-            font-weight: 800;
-            text-align: center;
+            border-radius: 12px;
             margin-bottom: 20px;
-            color: var(--primary);
-        }
-        body.dark .quick-settle-amount { background: #374151; color: var(--primary); }
-        .quick-settle-amount:focus { outline: none; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2); }
-        
-        .quick-settle-actions {
             display: flex;
-            gap: 10px;
+            align-items: center;
+            justify-content: flex-end;
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-light);
+            border: 2px solid transparent;
+            transition: all 0.3s;
+            position: relative;
+            min-height: 72px;
+        }
+        body.dark .calc-display { background: rgba(0,0,0,0.2); color: var(--text-dark); }
+        .calc-display.has-value { border-color: var(--primary); background: rgba(99, 102, 241, 0.1); }
+        
+        .currency-symbol {
+            font-size: 20px;
+            margin-right: 8px;
+            opacity: 0.6;
+            font-weight: normal;
+        }
+        .amount-value { letter-spacing: 1px; }
+        
+        .clear-btn {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--text-light);
+            opacity: 0.3;
+            font-size: 20px;
+            padding: 10px;
+        }
+        body.dark .clear-btn { color: var(--text-dark); }
+        
+        .numeric-keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+        
+        .key-btn {
+            background: var(--bg-light);
+            border: none;
+            border-radius: 12px;
+            padding: 15px 0;
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-light);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        body.dark .key-btn { background: rgba(255,255,255,0.1); color: var(--text-dark); box-shadow: none; }
+        
+        .key-btn:active { transform: scale(0.95); background: rgba(0,0,0,0.1); }
+        body.dark .key-btn:active { background: rgba(255,255,255,0.2); }
+        
+        .key-cancel { font-size: 16px; color: var(--text-light); opacity: 0.7; }
+        .key-delete { color: var(--danger); }
+        
+        .key-confirm {
+            grid-column: 1 / -1;
+            background: var(--primary);
+            color: white;
+            font-size: 20px;
+            margin-top: 8px;
+            padding: 18px 0;
+        }
+        body.dark .key-confirm { background: var(--primary); color: white; }
+        .key-confirm:active { background: var(--primary-dark); }
+
+        /* Mobile Responsive Styles for Settle Modal */
+        @media screen and (max-width: 768px) {
+            .settle-modal-overlay {
+                align-items: flex-end; /* Bottom align */
+                padding: 0;
+            }
+            
+            .settle-modal-overlay .modal-card {
+                width: 100%;
+                max-width: none;
+                border-radius: 24px 24px 0 0;
+                padding: 24px 20px 30px 20px; /* More bottom padding */
+                margin: 0;
+                animation: slideUp 0.3s ease-out;
+            }
+            
+            @keyframes slideUp {
+                from { transform: translateY(100%); }
+                to { transform: translateY(0); }
+            }
+
+            /* Adjust keypad button size for touch */
+            .key-btn { padding: 18px 0; font-size: 26px; }
+            
+            /* Compact the top part to save space */
+            .settle-modal-overlay .modal-title { margin-bottom: 15px; }
+            .settle-modal-overlay .settle-grid { margin-bottom: 15px; }
+            .settle-modal-overlay .list-item { padding: 8px; font-size: 14px; }
         }
     </style>
 </head>
@@ -898,7 +939,7 @@
         <!-- 模态框组件 -->
         
         <!-- 1. 结算模态框 -->
-        <div class="modal-overlay" :class="{ show: modals.settle }" @click="closeModal('settle')">
+        <div class="modal-overlay settle-modal-overlay" :class="{ show: modals.settle }" @click="closeModal('settle')">
             <div class="modal-card" @click.stop>
                 <div class="modal-title">结算分数</div>
                 
@@ -923,13 +964,30 @@
                     </div>
                 </div>
 
-                <div class="input-group">
-                    <input type="number" v-model.number="settleAmount" class="input-field" placeholder="输入金额" ref="amountInput">
+                <!-- Calculator Display -->
+                <div class="calc-display" :class="{ 'has-value': settleAmount }">
+                    <span class="currency-symbol">¥</span>
+                    <span class="amount-value">{{ settleAmount || '0' }}</span>
+                    <button v-if="settleAmount" class="clear-btn" @click="settleAmount = ''">
+                        <i class="fas fa-times-circle"></i>
+                    </button>
                 </div>
 
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn btn-secondary" style="flex: 1;" @click="closeModal('settle')">取消</button>
-                    <button class="btn btn-primary" style="flex: 1;" @click="confirmSettle">确认</button>
+                <!-- Numeric Keypad -->
+                <div class="numeric-keypad">
+                    <button class="key-btn" @click="appendNumber(1)">1</button>
+                    <button class="key-btn" @click="appendNumber(2)">2</button>
+                    <button class="key-btn" @click="appendNumber(3)">3</button>
+                    <button class="key-btn" @click="appendNumber(4)">4</button>
+                    <button class="key-btn" @click="appendNumber(5)">5</button>
+                    <button class="key-btn" @click="appendNumber(6)">6</button>
+                    <button class="key-btn" @click="appendNumber(7)">7</button>
+                    <button class="key-btn" @click="appendNumber(8)">8</button>
+                    <button class="key-btn" @click="appendNumber(9)">9</button>
+                    <button class="key-btn key-cancel" @click="closeModal('settle')">取消</button>
+                    <button class="key-btn" @click="appendNumber(0)">0</button>
+                    <button class="key-btn key-delete" @click="backspaceNumber"><i class="fas fa-backspace"></i></button>
+                    <button class="key-btn key-confirm" @click="confirmSettle">确认</button>
                 </div>
             </div>
         </div>
@@ -939,7 +997,7 @@
             <div class="modal-card" @click.stop>
                 <div class="modal-title">选择玩家入座</div>
                 <div class="input-field" style="display: flex; gap: 8px; padding: 4px; border: none; background: transparent;">
-                    <input v-model="newPlayerName" class="input-field" placeholder="新玩家名字" style="margin: 0;">
+                    <input v-model="newPlayerName" class="input-field" placeholder="新玩家名字" style="margin: 0;" @keyup.enter="addNewPlayer">
                     <button class="btn btn-primary" @click="addNewPlayer" style="padding: 0 16px;">
                         <i class="fas fa-plus"></i>
                     </button>
@@ -1050,31 +1108,11 @@
             </div>
         </div>
 
-        <!-- 7. 快速结算模态框 -->
-        <div class="quick-settle-overlay" :class="{ show: quickSettle.show }" @click="cancelQuickSettle"></div>
-        <div class="quick-settle-modal" :class="{ show: quickSettle.show }">
-            <div class="quick-settle-title">
-                {{ quickSettle.from }} <i class="fas fa-arrow-right" style="color: var(--primary); margin: 0 8px;"></i> {{ quickSettle.to }}
-            </div>
-            <input 
-                type="number" 
-                inputmode="numeric"
-                v-model="quickSettle.amount" 
-                class="quick-settle-amount" 
-                placeholder="0"
-                ref="quickAmountInput"
-                @keyup.enter="confirmQuickSettle"
-                @keyup.esc="cancelQuickSettle">
-            <div class="quick-settle-actions">
-                <button class="btn btn-secondary" style="flex: 1;" @click="cancelQuickSettle">取消</button>
-                <button class="btn btn-primary" style="flex: 1;" @click="confirmQuickSettle">确认</button>
-            </div>
-        </div>
 
     </div>
 
     <script>
-        const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+        const { createApp, ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
 
         // 数字滚动组件
         const CountUp = {
@@ -1158,14 +1196,10 @@
                 let lastAngle = null; // Track last angle to prevent jumps
                 let nextRoundTouchTimeout = null;
 
-                // Quick Settle State
-                const quickSettle = ref({
-                    show: false,
-                    from: null,
-                    to: null,
-                    amount: ''
-                });
-                const quickAmountInput = ref(null);
+                // Quick Settle State - DEPRECATED (Merged into Settle Modal)
+                // const quickSettle = ref({...});
+                // const quickAmountInput = ref(null);
+
 
                 // Chart
                 let chartInstance = null;
@@ -1489,6 +1523,44 @@
                     saveState();
                     closeModal('settle');
                 };
+
+                // Custom Keypad Logic
+                const appendNumber = (num) => {
+                    const current = settleAmount.value === '' ? '' : String(settleAmount.value);
+                    // Limit length if needed, e.g. max 6 digits
+                    if (current.length >= 6) return; 
+                    settleAmount.value = current + num;
+                };
+
+                const backspaceNumber = () => {
+                    const current = String(settleAmount.value);
+                    if (current.length > 0) {
+                        settleAmount.value = current.slice(0, -1);
+                    }
+                };
+
+                // Global keyboard listener
+                const handleKeydown = (e) => {
+                    if (!modals.value.settle) return;
+                    
+                    if (e.key >= '0' && e.key <= '9') {
+                        appendNumber(e.key);
+                    } else if (e.key === 'Backspace') {
+                        backspaceNumber();
+                    } else if (e.key === 'Enter') {
+                        confirmSettle();
+                    } else if (e.key === 'Escape') {
+                        closeModal('settle');
+                    }
+                };
+
+                onMounted(() => {
+                    window.addEventListener('keydown', handleKeydown);
+                });
+
+                onUnmounted(() => {
+                    window.removeEventListener('keydown', handleKeydown);
+                });
 
                 const undo = () => {
                     if (history.value.length === 0) return;
@@ -1994,48 +2066,13 @@
 
                 // Quick Settle Modal
                 const openQuickSettle = (from, to) => {
-                    quickSettle.value.from = from;
-                    quickSettle.value.to = to;
-                    quickSettle.value.amount = '';
-                    quickSettle.value.show = true;
-                    
-                    nextTick(() => {
-                        quickAmountInput.value?.focus();
-                        quickAmountInput.value?.select();
-                    });
+                    settleFrom.value = from;
+                    settleTo.value = to;
+                    settleAmount.value = '';
+                    selectingFrom.value = false; // Neither is selecting, we are ready to input
+                    modals.value.settle = true;
                 };
 
-                const confirmQuickSettle = () => {
-                    const amount = parseInt(quickSettle.value.amount);
-                    if (!amount || amount <= 0) return;
-                    
-                    // Update Scores
-                    const fromP = players.value.find(p => p.name === quickSettle.value.from);
-                    const toP = players.value.find(p => p.name === quickSettle.value.to);
-                    fromP.score -= amount;
-                    toP.score += amount;
-
-                    // Record History
-                    history.value.unshift({
-                        time: Date.now(),
-                        round: currentRound.value,
-                        dealerIndex: dealerIndex.value,
-                        transactions: [{ from: quickSettle.value.from, to: quickSettle.value.to, amount }]
-                    });
-
-                    // Show Diff Animation
-                    lastDiff.value = {};
-                    lastDiff.value[quickSettle.value.from] = -amount;
-                    lastDiff.value[quickSettle.value.to] = amount;
-                    setTimeout(() => lastDiff.value = {}, 3000);
-
-                    saveState();
-                    quickSettle.value.show = false;
-                };
-
-                const cancelQuickSettle = () => {
-                    quickSettle.value.show = false;
-                };
 
                 // Round Management
                 const handleNextRoundClick = () => {
@@ -2205,6 +2242,7 @@
                     activePlayers, availablePlayers, dialRotation,
                     getPlayerScore, handleSeatClick, addNewPlayer, sitDown, newPlayerName,
                     openSettleModal, settleFrom, settleTo, settleAmount, selectingFrom, selectSettlePlayer, confirmSettle, amountInput,
+                    appendNumber, backspaceNumber,
                     undo, handleNextRoundClick, nextRoundCheck, nextRound,
                     formatTime, clearData,
                     showStats, showHistory: () => modals.value.history = true, showSettings: () => modals.value.settings = true, showRoundModal: () => {},
@@ -2215,8 +2253,6 @@
                     // Drag and Drop (Next Round Button)
                     handleNextRoundDragStart, handleNextRoundDragEnd,
                     handleNextRoundTouchStart, handleNextRoundTouchMove, handleNextRoundTouchEnd,
-                    // Quick Settle
-                    quickSettle, quickAmountInput, confirmQuickSettle, cancelQuickSettle,
                     
                     // Dice
                     diceMode, isRolling, hasRolled, diceStyles, handleDialClick, closeDiceMode
