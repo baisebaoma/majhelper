@@ -345,6 +345,42 @@
             </div>
         </div>
 
+        <!-- 7. 设置原点模态框 -->
+        <div class="modal-overlay" :class="{ show: modals.originSet }" @click="closeModal('originSet')">
+            <div class="modal-card" @click.stop>
+                <div class="modal-title">设置原点</div>
+                <div v-if="players.length === 0" style="text-align: center; opacity: 0.5; padding: 40px 20px;">
+                    至少需要一个玩家
+                </div>
+                <div v-else style="max-height: 400px; overflow-y: auto;">
+                    <div v-for="p in players" :key="p.name" class="origin-item">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-weight: 600;">{{ p.name }}</span>
+                            <button class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;" @click="setOriginToZero(p.name)">
+                                归零
+                            </button>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <span style="font-size: 14px; opacity: 0.7;">起始分数：</span>
+                            <input 
+                                type="number" 
+                                :value="p.origin || 0" 
+                                @input="updateOrigin(p.name, $event.target.value)"
+                                class="input-field" 
+                                style="flex: 1; margin: 0; padding: 8px 12px;"
+                                placeholder="0">
+                        </div>
+                        <div style="font-size: 12px; opacity: 0.5; margin-top: 4px;">
+                            当前分数: {{ getPlayerCurrentScore(p.name) }} | 显示分数: {{ getPlayerScore(p.name) }}
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" @click="closeModal('originSet')">
+                    <i class="fas fa-check"></i> 完成
+                </button>
+            </div>
+        </div>
+
         <!-- 8. 操作说明模态框 -->
         <div class="modal-overlay" :class="{ show: modals.help }" @click="closeModal('help')">
             <div class="modal-card" @click.stop>
