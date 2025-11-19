@@ -5,7 +5,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 150; /* 高于普通元素，低于顶部栏 */
+    z-index: 250; /* 高于游戏区域和底部操作栏，但低于顶部栏(260) */
     background: transparent;
     /* 阻止所有指针事件穿透 */
     pointer-events: auto;

@@ -17,27 +17,27 @@
         <div v-if="isLocked" class="lock-overlay" @click.stop @touchstart.stop></div>
 
         <!-- 顶部栏 -->
-        <header class="header" style="z-index: 200;">
+        <header class="header" style="z-index: 260;">
             <div class="header-actions">
-                <button class="icon-btn" @click="adjustScale(-1)" :class="{ disabled: !canZoomOut }" data-tooltip="缩小">
+                <button class="icon-btn" @click="adjustScale(-1)" :class="{ disabled: !canZoomOut }" :style="{ pointerEvents: isLocked ? 'none' : 'auto' }" data-tooltip="缩小">
                     <i class="fas fa-minus"></i>
                 </button>
-                <button class="icon-btn" @click="adjustScale(1)" :class="{ disabled: !canZoomIn }" data-tooltip="放大">
+                <button class="icon-btn" @click="adjustScale(1)" :class="{ disabled: !canZoomIn }" :style="{ pointerEvents: isLocked ? 'none' : 'auto' }" data-tooltip="放大">
                     <i class="fas fa-plus"></i>
                 </button>
-                <button class="icon-btn" @click="showStats" data-tooltip="统计图表">
+                <button class="icon-btn" @click="showStats" :style="{ pointerEvents: isLocked ? 'none' : 'auto' }" data-tooltip="统计图表">
                     <i class="fas fa-chart-line"></i>
                 </button>
-                <button class="icon-btn" @click="showHistory" data-tooltip="历史记录">
+                <button class="icon-btn" @click="showHistory" :style="{ pointerEvents: isLocked ? 'none' : 'auto' }" data-tooltip="历史记录">
                     <i class="fas fa-history"></i>
                 </button>
-                <button class="icon-btn" @click="toggleLock" :data-tooltip="isLocked ? '解锁' : '锁定'">
+                <button class="icon-btn lock-btn" @click="toggleLock" :data-tooltip="isLocked ? '解锁' : '锁定'">
                     <i class="fas" :class="isLocked ? 'fa-lock' : 'fa-lock-open'"></i>
                 </button>
-                <button class="icon-btn" @click="showHelp" data-tooltip="操作说明">
+                <button class="icon-btn" @click="showHelp" :style="{ pointerEvents: isLocked ? 'none' : 'auto' }" data-tooltip="操作说明">
                     <i class="fas fa-question-circle"></i>
                 </button>
-                <button class="icon-btn" @click="showSettings" data-tooltip="设置">
+                <button class="icon-btn" @click="showSettings" :style="{ pointerEvents: isLocked ? 'none' : 'auto' }" data-tooltip="设置">
                     <i class="fas fa-cog"></i>
                 </button>
             </div>
@@ -56,7 +56,8 @@
                      'roll-finished': diceMode && !isRolling && hasRolled
                  }"
                  :style="{ 
-                     transform: diceMode ? '' : `rotate(${dialRotation}deg) scale(${globalScale})` 
+                     transform: diceMode ? '' : `rotate(${dialRotation}deg) scale(${globalScale})`,
+                     pointerEvents: isLocked ? 'none' : 'auto'
                  }"
                  @click="handleDialClick">
                 <!-- 只有当该方向对应的是东(dealerIndex)时才高亮 -->
@@ -99,8 +100,8 @@
                      { 'drag-over': dragState.overIndex === index && (dragState.fromIndex !== index || dragState.draggingNextRound) && (seat || dragState.draggingNextRound) },
                      { 'empty-seat': !seat }
                  ]"
-                 :style="{ '--scale-factor': globalScale }"
-                 :draggable="seat ? true : false"
+                 :style="{ '--scale-factor': globalScale, pointerEvents: isLocked ? 'none' : 'auto' }"
+                 :draggable="!isLocked && seat ? true : false"
                  @click="handleSeatClick(index)"
                  @dragstart="handleDragStart(index, $event)"
                  @dragend="handleDragEnd"
@@ -136,20 +137,20 @@
 
         <!-- 底部操作栏 -->
         <footer class="action-bar">
-            <button class="btn btn-warning" @click="undo" :disabled="history.length === 0" :style="{ opacity: history.length ? 1 : 0.5 }">
+            <button class="btn btn-warning" @click="undo" :disabled="history.length === 0" :style="{ opacity: history.length ? 1 : 0.5, pointerEvents: isLocked ? 'none' : 'auto' }">
                 <i class="fas fa-undo"></i> 撤销
             </button>
             <button 
                 class="btn btn-secondary next-round-btn" 
                 :class="{ dragging: dragState.draggingNextRound }"
-                draggable="true"
+                :draggable="!isLocked"
                 @click="handleNextRoundClick"
                 @dragstart="handleNextRoundDragStart"
                 @dragend="handleNextRoundDragEnd"
                 @touchstart="handleNextRoundTouchStart"
                 @touchmove="handleNextRoundTouchMove"
                 @touchend="handleNextRoundTouchEnd"
-                style="flex: 1; justify-content: center;">
+                :style="{ flex: 1, justifyContent: 'center', pointerEvents: isLocked ? 'none' : 'auto' }">
                 下一局 <i class="fas fa-chevron-right"></i>
             </button>
         </footer>
