@@ -3,14 +3,30 @@ const { createApp, ref, computed, onMounted, onUnmounted, watch, nextTick } = Vu
 // 数字滚动组件
 const CountUp = {
     props: ['to'],
-    template: '<span>{{ displayValue }}</span>',
+    template: '<span :class="colorClass">{{ displayValue }}</span>',
     setup(props) {
         const displayValue = ref(props.to);
+        const colorClass = ref('');
         let animationFrame;
+        let timeout;
 
         watch(() => props.to, (newVal, oldVal) => {
             const start = oldVal || 0;
             const end = newVal;
+            
+            // Set color based on change direction
+            if (end > start) {
+                colorClass.value = 'score-changed-pos';
+            } else if (end < start) {
+                colorClass.value = 'score-changed-neg';
+            }
+            
+            // Reset color after animation (approx 1s + buffer)
+            if (timeout) clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                colorClass.value = '';
+            }, 1500);
+
             const duration = 1000;
             let startTime = null;
 
@@ -30,7 +46,7 @@ const CountUp = {
             animationFrame = requestAnimationFrame(animate);
         });
 
-        return { displayValue };
+        return { displayValue, colorClass };
     }
 };
 
@@ -110,12 +126,12 @@ createApp({
             // Calculate potential new scale
             const proposedScale = globalScale.value + (direction * scaleStep);
             
+            // Calculate Max Possible Scale based on current DOM state
+            const maxScale = calculateMaxScale();
+            
             if (direction > 0) {
                 // Zoom In
                 if (!canZoomIn.value) return;
-                
-                // Calculate Max Possible Scale based on current DOM state
-                const maxScale = calculateMaxScale();
                 
                 if (proposedScale >= maxScale) {
                     // If proposed step exceeds max, clamp to max and disable zoom in
@@ -123,8 +139,11 @@ createApp({
                     canZoomIn.value = false;
                 } else {
                     globalScale.value = proposedScale;
+                    // Re-check if we can still zoom in
+                    canZoomIn.value = globalScale.value < maxScale;
                 }
-                canZoomOut.value = true;
+                // Always allow zoom out after zooming in (unless at minimum)
+                canZoomOut.value = globalScale.value > 0.5;
             } else {
                 // Zoom Out
                 if (!canZoomOut.value) return;
@@ -132,13 +151,21 @@ createApp({
                 if (proposedScale < 0.5) {
                     globalScale.value = 0.5;
                     canZoomOut.value = false;
+                    // Always allow zoom in after reaching minimum
+                    canZoomIn.value = globalScale.value < maxScale;
+                    // 保存缩放值到 localStorage
+                    localStorage.setItem('mj_scale', globalScale.value.toString());
                     return;
                 }
                 
                 globalScale.value = proposedScale;
-                canZoomIn.value = true;
-                canZoomOut.value = proposedScale > 0.5;
+                // Always allow zoom in after zooming out
+                canZoomIn.value = globalScale.value < maxScale;
+                canZoomOut.value = globalScale.value > 0.5;
             }
+            
+            // 保存缩放值到 localStorage
+            localStorage.setItem('mj_scale', globalScale.value.toString());
         };
         
         // Calculate the maximum scale allowed before collision or overflow
@@ -151,6 +178,8 @@ createApp({
             const H = card0.offsetHeight;
             // Use offsetWidth for dial diameter
             const dialRadius = dial.offsetWidth / 2;
+            
+            // 直接使用当前窗口高度，不再处理横屏的特殊逻辑
             const windowH = window.innerHeight;
             
             // Get Card0 Bottom position
@@ -185,6 +214,24 @@ createApp({
             
             // Apply multiplier and cap at absolute maximum
             return Math.min(calculatedMax * maxScaleMultiplier, absoluteMaxScale);
+        };
+        
+        // Calculate optimal scale based on screen size and card dimensions
+        const calculateOptimalScale = () => {
+            const card0 = document.querySelector('.pos-0');
+            const dial = document.querySelector('.center-dial');
+            
+            if (!card0 || !dial) return 1; // Fallback if DOM not ready
+            
+            // Get maximum safe scale
+            const maxScale = calculateMaxScale();
+            
+            // Use 85% of max scale as optimal (leaves some margin for safety)
+            // But ensure it's at least 1.0 for good visibility
+            const optimalScale = Math.max(1.0, maxScale * 0.85);
+            
+            // Cap at absolute maximum
+            return Math.min(optimalScale, absoluteMaxScale);
         };
 
         // Legacy check function replaced by direct calculation
@@ -375,11 +422,120 @@ createApp({
         
         // --- Methods ---
         
+        // Watch for scale changes and update position offsets
+        watch(globalScale, (newScale) => {
+            // 使用 nextTick 确保 Vue 已经更新了 DOM
+            nextTick(() => {
+                updateCardPositionOffsets(newScale);
+            });
+        });
+        
+        const updateCardPositionOffsets = (scale) => {
+            // 获取底部卡片(pos-0)来测量尺寸，因为它没有旋转
+            const card = document.querySelector('.pos-0');
+            if (!card) return;
+            
+            // 使用 requestAnimationFrame 确保浏览器已经应用了样式和缩放
+            requestAnimationFrame(() => {
+                // 再次使用 requestAnimationFrame 确保样式完全应用
+                requestAnimationFrame(() => {
+                    // 获取卡片的实际渲染尺寸（包含当前缩放）
+                    const rect = card.getBoundingClientRect();
+                    
+                    // 从 DOM 读取实际应用的缩放值（Vue 已经通过 :style 设置了）
+                    const appliedScale = parseFloat(getComputedStyle(card).getPropertyValue('--scale-factor')) || scale;
+                    
+                    // 计算原始尺寸（未缩放时）
+                    const originalHeight = rect.height / appliedScale;
+                    
+                    // 计算偏移量：当从1放大到scale时，需要移动 size * (scale - 1) / 2
+                    // pos-0和pos-2: 垂直方向使用原始height
+                    // pos-1和pos-3: 旋转90度后，水平方向使用原始height (旋转前的垂直尺寸)
+                    const offset = originalHeight * (appliedScale - 1) / 2;
+                    
+                    // 应用到所有玩家卡片
+                    const cards = document.querySelectorAll('.player-card');
+                    cards.forEach((c) => {
+                        c.style.setProperty('--offset-x', `${offset}px`);
+                        c.style.setProperty('--offset-y', `${offset}px`);
+                    });
+                });
+            });
+        };
+        
         // Init
         onMounted(() => {
             loadState();
             initTheme();
+            
+            // 加载保存的缩放值，如果没有则自动计算
+            const savedScale = localStorage.getItem('mj_scale');
+            if (savedScale) {
+                const scale = parseFloat(savedScale);
+                // 确保缩放值在有效范围内
+                if (scale >= 0.5 && scale <= absoluteMaxScale) {
+                    globalScale.value = scale;
+                } else {
+                    // 如果保存的值无效，使用自动计算
+                    nextTick(() => {
+                        setTimeout(() => {
+                            const optimalScale = calculateOptimalScale();
+                            globalScale.value = optimalScale;
+                            localStorage.setItem('mj_scale', optimalScale.toString());
+                            // 更新按钮状态
+                            const maxScale = calculateMaxScale();
+                            canZoomIn.value = optimalScale < maxScale;
+                            canZoomOut.value = optimalScale > 0.5;
+                        }, 100);
+                    });
+                }
+            } else {
+                // 首次使用，自动计算合适的缩放比例
+                nextTick(() => {
+                    setTimeout(() => {
+                        const optimalScale = calculateOptimalScale();
+                        globalScale.value = optimalScale;
+                        localStorage.setItem('mj_scale', optimalScale.toString());
+                        
+                        // 立即更新偏移量，确保初次加载时位置正确
+                        updateCardPositionOffsets(optimalScale);
+                        
+                        // 更新按钮状态
+                        const maxScale = calculateMaxScale();
+                        canZoomIn.value = optimalScale < maxScale;
+                        canZoomOut.value = optimalScale > 0.5;
+                    }, 100);
+                });
+            }
+            
             requestWakeLock();
+            
+            // 初始化位置偏移和按钮状态 - 使用多个 nextTick 和 setTimeout 确保 DOM 完全准备好
+            nextTick(() => {
+                // 等待 Vue 更新 DOM
+                nextTick(() => {
+                    // 再等待浏览器渲染
+                    setTimeout(() => {
+                        updateCardPositionOffsets(globalScale.value);
+                        // 初始化按钮状态
+                        const maxScale = calculateMaxScale();
+                        canZoomIn.value = globalScale.value < maxScale;
+                        canZoomOut.value = globalScale.value > 0.5;
+                    }, 150);
+                });
+            });
+            
+            // 监听窗口大小变化和方向变化，重新计算偏移量和缩放限制
+            const handleResize = () => {
+                updateCardPositionOffsets(globalScale.value);
+                // 重新计算缩放限制，更新按钮状态
+                const maxScale = calculateMaxScale();
+                canZoomIn.value = globalScale.value < maxScale;
+                canZoomOut.value = globalScale.value > 0.5;
+            };
+            
+            window.addEventListener('resize', handleResize);
+            // 移除 orientationchange 监听
         });
 
         // Theme
@@ -393,9 +549,13 @@ createApp({
         const initTheme = () => {
             const saved = localStorage.getItem('mj_theme');
             if (saved) {
+                // 如果已保存，使用保存的值
                 isDark.value = saved === 'dark';
             } else {
+                // 首次进入，与系统设置保持一致
                 isDark.value = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                // 保存系统设置
+                localStorage.setItem('mj_theme', isDark.value ? 'dark' : 'light');
             }
             if (isDark.value) document.body.classList.add('dark');
         };
@@ -767,14 +927,6 @@ createApp({
 
         // Drag Clone Helpers
         const getCardOffset = () => {
-            if (window.innerWidth >= 768) {
-                // 根据 vmin 动态计算偏移
-                // 42vmin / 2 = 21vmin
-                const vmin = Math.min(window.innerWidth, window.innerHeight);
-                const halfWidth = (vmin * 0.42) / 2;
-                const halfHeight = (vmin * 0.3) / 2; // 估算高度
-                return { x: halfWidth, y: halfHeight };
-            }
             return { x: 80, y: 40 };
         };
 
@@ -1138,6 +1290,7 @@ createApp({
         const clearData = () => {
             if (confirm('确定清空所有数据？')) {
                 localStorage.removeItem('mj_data_v3');
+                localStorage.removeItem('mj_scale'); // Clear saved scale
                 location.reload();
             }
         };
