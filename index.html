@@ -8,28 +8,36 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/toggle.css">
+    <link rel="stylesheet" href="css/lock.css">
 </head>
 <body>
     <div id="app">
+        <!-- 锁定状态下的透明遮罩层 -->
+        <div v-if="isLocked" class="lock-overlay" @click.stop @touchstart.stop></div>
+
         <!-- 顶部栏 -->
-        <header class="header">
+        <header class="header" style="z-index: 200;">
             <div class="header-actions">
-                <button class="icon-btn" @click="adjustScale(-1)" :class="{ disabled: !canZoomOut }">
+                <button class="icon-btn" @click="adjustScale(-1)" :class="{ disabled: !canZoomOut }" data-tooltip="缩小">
                     <i class="fas fa-minus"></i>
                 </button>
-                <button class="icon-btn" @click="adjustScale(1)" :class="{ disabled: !canZoomIn }">
+                <button class="icon-btn" @click="adjustScale(1)" :class="{ disabled: !canZoomIn }" data-tooltip="放大">
                     <i class="fas fa-plus"></i>
                 </button>
-                <button class="icon-btn" @click="toggleTheme">
-                    <i class="fas" :class="isDark ? 'fa-sun' : 'fa-moon'"></i>
-                </button>
-                <button class="icon-btn" @click="showStats">
+                <button class="icon-btn" @click="showStats" data-tooltip="统计图表">
                     <i class="fas fa-chart-line"></i>
                 </button>
-                <button class="icon-btn" @click="showHistory">
+                <button class="icon-btn" @click="showHistory" data-tooltip="历史记录">
                     <i class="fas fa-history"></i>
                 </button>
-                <button class="icon-btn" @click="showSettings">
+                <button class="icon-btn" @click="toggleLock" :data-tooltip="isLocked ? '解锁' : '锁定'">
+                    <i class="fas" :class="isLocked ? 'fa-lock' : 'fa-lock-open'"></i>
+                </button>
+                <button class="icon-btn" @click="showHelp" data-tooltip="操作说明">
+                    <i class="fas fa-question-circle"></i>
+                </button>
+                <button class="icon-btn" @click="showSettings" data-tooltip="设置">
                     <i class="fas fa-cog"></i>
                 </button>
             </div>
@@ -277,35 +285,18 @@
         <div class="modal-overlay" :class="{ show: modals.settings }" @click="closeModal('settings')">
             <div class="modal-card" @click.stop>
                 <div class="modal-title">设置</div>
-                
-                <!-- 操作说明 -->
-                <div class="help-section">
-                    <div style="font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                        <i class="fas fa-info-circle" style="color: var(--primary);"></i>
-                        <span>操作说明</span>
+
+                <!-- 日间/夜间模式开关 -->
+                <div class="list-item" style="cursor: default; justify-content: space-between;">
+                    <div style="display: flex; align-items: center;">
+                        <i class="fas" :class="isDark ? 'fa-moon' : 'fa-sun'" style="margin-right: 8px; width: 16px; text-align: center;"></i>
+                        <span>{{ isDark ? '夜间模式' : '日间模式' }}</span>
                     </div>
-                    <div style="font-size: 14px; line-height: 1.6; opacity: 0.8;">
-                        <div style="margin-bottom: 8px;">
-                            <strong>💰 结算分数：</strong>拖动玩家A到玩家B，输入分数后确认（A给B分数）
-                        </div>
-                        <div style="margin-bottom: 8px;">
-                            <strong>👑 指定初始庄家：</strong>在未坐满前，拖动"下一局"到任意位置指定初始庄家（不增加局数）
-                        </div>
-                        <div style="margin-bottom: 8px;">
-                            <strong>🎲 指定庄家：</strong>游戏中，拖动"下一局"到玩家身上进行换庄或连庄
-                        </div>
-                        <div style="margin-bottom: 8px;">
-                            <strong>🔄 自动换庄：</strong>点击"下一局"按钮，自动换庄到下一家并进入下一局
-                        </div>
-                        <div style="margin-bottom: 8px;">
-                            <strong>🎲 打骰子：</strong>点击中间圆盘进入骰子模式，再次点击进行掷骰子
-                        </div>
-                        <div>
-                            <strong>↩️ 撤销操作：</strong>点击"撤销"按钮可撤销上一次结算
-                        </div>
+                    <div class="toggle-switch" :class="{ active: isDark }" @click="toggleTheme">
+                        <div class="toggle-handle"></div>
                     </div>
                 </div>
-                
+
                 <div class="list-item" @click="showOriginSet" style="cursor: pointer;">
                     <span><i class="fas fa-crosshairs" style="margin-right: 8px;"></i> 设置原点</span>
                 </div>
@@ -313,6 +304,22 @@
                 <div class="list-item" @click="clearData" style="color: var(--danger); cursor: pointer;">
                     <span><i class="fas fa-trash-alt" style="margin-right: 8px;"></i> 清空所有数据</span>
                 </div>
+
+                <!-- 开源信息 -->
+                <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(0,0,0,0.1); text-align: center; font-size: 12px; opacity: 0.6; line-height: 1.8;">
+                    <div>开发者: baisebaoma</div>
+                    <div>
+                        <a href="https://github.com/baisebaoma/majhelper" target="_blank" style="color: inherit; text-decoration: none;">
+                            <i class="fab fa-github"></i> GitHub 仓库
+                        </a>
+                    </div>
+                    <div>
+                        <a href="https://baisebaoma.github.io/majhelper/" target="_blank" style="color: inherit; text-decoration: none;">
+                            <i class="fas fa-globe"></i> 在线访问
+                        </a>
+                    </div>
+                </div>
+
                 <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" @click="closeModal('settings')">
                     <i class="fas fa-check"></i> 关闭
                 </button>
@@ -337,48 +344,40 @@
             </div>
         </div>
 
-        <!-- 7. 设置原点模态框 -->
-        <div class="modal-overlay" :class="{ show: modals.originSet }" @click="closeModal('originSet')">
+        <!-- 8. 操作说明模态框 -->
+        <div class="modal-overlay" :class="{ show: modals.help }" @click="closeModal('help')">
             <div class="modal-card" @click.stop>
-                <div class="modal-title">设置原点</div>
-                <div style="font-size: 14px; opacity: 0.8; margin-bottom: 16px; text-align: center;">
-                    设置每个玩家的起始分数（原点）
-                </div>
-                <div style="max-height: 400px; overflow-y: auto;">
-                    <div v-for="p in players" :key="p.name" class="origin-item">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="font-weight: 600;">{{ p.name }}</span>
-                            <span style="font-size: 12px; opacity: 0.6;">
-                                当前分数: {{ getPlayerScore(p.name) }} 
-                                <span v-if="p.origin && p.origin !== 0" style="color: var(--primary);">
-                                    (原点: {{ p.origin }})
-                                </span>
-                            </span>
+                <div class="modal-title">操作说明</div>
+                <div class="help-section">
+                    <div style="font-size: 14px; line-height: 1.6; opacity: 0.8;">
+                        <div style="margin-bottom: 8px;">
+                            <strong>💰 结算分数：</strong>拖动玩家A到玩家B，输入分数后确认（A给B分数）
                         </div>
-                        <div style="display: flex; gap: 8px; align-items: center;">
-                            <input 
-                                type="number" 
-                                class="input-field" 
-                                style="flex: 1; margin: 0;"
-                                :value="p.origin || 0"
-                                @input="updateOrigin(p.name, $event.target.value)"
-                                placeholder="起始分数">
-                            <button 
-                                class="btn btn-secondary" 
-                                style="padding: 8px 16px;"
-                                @click="setOriginToZero(p.name)">
-                                清零
-                            </button>
+                        <div style="margin-bottom: 8px;">
+                            <strong>👑 指定初始庄家：</strong>在未坐满前，拖动"下一局"到任意位置指定初始庄家（不增加局数）
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <strong>🎲 指定庄家：</strong>游戏中，拖动"下一局"到玩家身上进行换庄或连庄
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <strong>🔄 自动换庄：</strong>点击"下一局"按钮，自动换庄到下一家并进入下一局
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <strong>🎲 打骰子：</strong>点击中间圆盘进入骰子模式，再次点击进行掷骰子
+                        </div>
+                        <div>
+                            <strong>↩️ 撤销操作：</strong>点击"撤销"按钮可撤销上一次结算
+                        </div>
+                        <div>
+                            <strong>🔒 锁定/解锁：</strong>点击顶部锁形图标可锁定界面，防止误触。
                         </div>
                     </div>
                 </div>
-                <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" @click="closeModal('originSet')">
-                    <i class="fas fa-check"></i> 完成
+                <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" @click="closeModal('help')">
+                    <i class="fas fa-check"></i> 关闭
                 </button>
             </div>
         </div>
-
-
     </div>
 
     <script src="js/main.js" type="module"></script>

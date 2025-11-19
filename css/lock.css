@@ -1,0 +1,12 @@
+/* 锁定层 */
+.lock-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 150; /* 高于普通元素，低于顶部栏 */
+    background: transparent;
+    /* 阻止所有指针事件穿透 */
+    pointer-events: auto;
+}

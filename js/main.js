@@ -55,6 +55,7 @@ createApp({
     setup() {
         // --- State ---
         const isDark = ref(false);
+        const isLocked = ref(false); // 锁定状态
         const players = ref([]); // { name, score }
         const seats = ref([null, null, null, null]); // names
         const currentRound = ref(1);
@@ -72,7 +73,8 @@ createApp({
             stats: false,
             settings: false,
             dealerSet: false,
-            originSet: false // 设置原点模态框
+            originSet: false, // 设置原点模态框
+            help: false // 操作说明模态框
         });
         
         const activeSeatIndex = ref(null);
@@ -119,9 +121,8 @@ createApp({
         const canZoomIn = ref(true);
         const canZoomOut = ref(true);
         const scaleStep = 0.10; // 每次调整百分之多少
-        const maxScaleMultiplier = 2.0; // 最大缩放倍数（相对于计算出的安全值）- 在这里调整！
-        const absoluteMaxScale = 2.0; // 绝对最大缩放限制（无论计算值多大，都不超过这个值）- 在这里调整！
-        
+        const absoluteMaxScale = 2.5; // 绝对最大缩放限制
+
         const adjustScale = (direction) => {
             // Calculate potential new scale
             const proposedScale = globalScale.value + (direction * scaleStep);
@@ -140,7 +141,7 @@ createApp({
                 } else {
                     globalScale.value = proposedScale;
                     // Re-check if we can still zoom in
-                    canZoomIn.value = globalScale.value < maxScale;
+                    canZoomIn.value = globalScale.value < maxScale - 0.01; // Add epsilon
                 }
                 // Always allow zoom out after zooming in (unless at minimum)
                 canZoomOut.value = globalScale.value > 0.5;
@@ -175,63 +176,92 @@ createApp({
             
             if (!card0 || !dial) return absoluteMaxScale; // Fallback max if DOM not ready
             
-            const H = card0.offsetHeight;
-            // Use offsetWidth for dial diameter
+            // 获取元素尺寸
+            // 注意：我们需要原始（未缩放）的尺寸。
+            // getBoundingClientRect 获取的是变换后的尺寸。
+            // offsetHeight/offsetWidth 通常也是包含变换的（取决于浏览器，但在 Vue scale binding 下通常是）。
+            // 为了准确，我们除以当前的 globalScale (如果它是通过 CSS transform scale 应用的)
+            // 或者，我们可以临时创建一个不可见的克隆来测量，但这太重了。
+            // 既然我们知道 scale 是通过 var(--scale-factor) 应用的 transform，
+            // 我们尝试获取元素的 offsetHeight，然后除以当前的 globalScale.value 来还原原始尺寸。
+            // 但要注意 offsetHeight 返回的是整数。
+            
+            // 更可靠的方法：直接读取 CSS 变量可能不准，我们假设当前的 offsetHeight 是应用了 scale 后的。
+            // 但实际上 transform: scale() 不会改变 offsetHeight/Width 的返回值 (Layout size vs Render size).
+            // 在大多数浏览器中，transform 不改变 offsetWidth/Height 属性值，它们返回的是 layout 尺寸。
+            // 只有 getBoundingClientRect 会返回 render 尺寸。
+            // 所以直接用 offsetHeight 应该是原始尺寸。为了保险，我们做个校验。
+            
+            const currentScale = globalScale.value;
+            const rect = card0.getBoundingClientRect();
+            
+            // 如果 rect.height 明显大于 offsetHeight，说明 offsetHeight 是原始尺寸。
+            // 如果它们接近，说明 offsetHeight 已经是缩放后的（不太可能）。
+            // 这里的 H 应该是原始高度。
+            let H = card0.offsetHeight;
+            
+            // 如果 offsetHeight 不准确，我们可以用 rect.height / currentScale
+            if (Math.abs(rect.height - H * currentScale) < 5) {
+                 // 这是一个验证，如果成立，说明 offsetHeight 确实是原始高度
+            } else if (Math.abs(rect.height - H) < 5 && currentScale !== 1) {
+                 // 如果 rect.height 等于 offsetHeight 且 scale != 1，说明 offsetHeight 也是缩放后的？
+                 // 或者 transform 没生效？
+                 // 通常 transform 不影响 offsetHeight。我们暂且信任 offsetHeight。
+            }
+
+            // Use offsetWidth for dial diameter (assuming square/circle)
             const dialRadius = dial.offsetWidth / 2;
             
-            // 直接使用当前窗口高度，不再处理横屏的特殊逻辑
-            const windowH = window.innerHeight;
+            // 屏幕尺寸
+            const screenW = window.innerWidth;
+            const screenH = window.innerHeight;
+            const spaceX = screenW / 2;
+            const spaceY = screenH / 2;
             
-            // Get Card0 Bottom position
-            const style = window.getComputedStyle(card0);
-            let bottomVal = parseFloat(style.bottom);
-            if (isNaN(bottomVal)) bottomVal = 20; // fallback
+            // 边距与间隙
+            // CSS 中定义的边距是 20px (bottom/right/top/left)
+            // 我们希望保留至少 5px 的间隙防止重叠
+            const margin = 20;
+            const gap = 5;
             
-            // Card Center Y relative to screen bottom
-            const centerY_fromBottom = bottomVal + H / 2;
+            // 公式推导：
+            // 由于我们有 offset 补偿逻辑 (updateCardPositionOffsets)，
+            // 卡片的视觉外边缘始终保持在距离屏幕边缘 margin (20px) 的位置。
+            // 因此，卡片中心距离屏幕中心的距离是：
+            // CenterPos = Space - (margin + VisualCardHeight / 2)
+            // 其中 VisualCardHeight = H * s
+            // CenterPos = Space - 20 - H * s / 2
+            //
+            // 碰撞检测：
+            // 卡片视觉内边缘不能碰到转盘。
+            // 卡片内边缘位置 = CenterPos - VisualCardHeight / 2
+            //               = Space - 20 - H * s / 2 - H * s / 2
+            //               = Space - 20 - H * s
+            // 转盘边缘位置 = DialRadius * s
+            //
+            // 条件：卡片内边缘 > 转盘边缘 + gap
+            // Space - 20 - H * s >= DialRadius * s + gap
+            // Space - 20 - gap >= s * (H + DialRadius)
+            // s <= (Space - 25) / (H + DialRadius)
             
-            // Distance from Card Center to Screen Center
-            const distToCenter = (windowH / 2) - centerY_fromBottom;
+            const limitX = (spaceX - margin - gap) / (H + dialRadius);
+            const limitY = (spaceY - margin - gap) / (H + dialRadius);
             
-            // Constraint 1: Screen Bottom Edge
-            // Visual Bottom = CenterY - (H * s / 2)
-            // We want Visual Bottom >= 5px
-            // CenterY - H*s/2 >= 5  =>  CenterY - 5 >= H*s/2  =>  s <= (CenterY - 5) * 2 / H
-            const maxScaleEdge = (centerY_fromBottom - 5) * 2 / H;
+            // 取两者较小值
+            const calculatedMax = Math.min(limitX, limitY);
             
-            // Constraint 2: Dial Collision
-            // Visual Top = CenterY + (H * s / 2) (relative to bottom)
-            // Dial Bottom Edge = (ScreenH / 2) - (DialRadius * s)
-            // We want Visual Top <= Dial Bottom Edge - 5px
-            // CenterY + H*s/2 <= (ScreenH/2) - DialRadius*s - 5
-            // H*s/2 + DialRadius*s <= (ScreenH/2) - CenterY - 5
-            // s * (H/2 + DialRadius) <= distToCenter - 5
-            // s <= (distToCenter - 5) / (H/2 + DialRadius)
-            const maxScaleCollision = (distToCenter - 5) / (H / 2 + dialRadius);
+            // 确保不为负数（极小屏幕情况）
+            const safeMax = Math.max(0.5, calculatedMax);
             
-            // Calculate the base max scale (stricter constraint)
-            const calculatedMax = Math.min(maxScaleEdge, maxScaleCollision);
-            
-            // Apply multiplier and cap at absolute maximum
-            return Math.min(calculatedMax * maxScaleMultiplier, absoluteMaxScale);
+            return Math.min(safeMax, absoluteMaxScale);
         };
         
         // Calculate optimal scale based on screen size and card dimensions
         const calculateOptimalScale = () => {
-            const card0 = document.querySelector('.pos-0');
-            const dial = document.querySelector('.center-dial');
-            
-            if (!card0 || !dial) return 1; // Fallback if DOM not ready
-            
-            // Get maximum safe scale
             const maxScale = calculateMaxScale();
-            
-            // Use 85% of max scale as optimal (leaves some margin for safety)
-            // But ensure it's at least 1.0 for good visibility
-            const optimalScale = Math.max(1.0, maxScale * 0.85);
-            
-            // Cap at absolute maximum
-            return Math.min(optimalScale, absoluteMaxScale);
+            // 直接使用计算出的最大安全值，或者稍微留一点点余地 (98%)
+            // 既然用户要求"最大"，我们可以直接用 maxScale，或者留极小的 buffer
+            return Math.min(maxScale * 0.98, absoluteMaxScale);
         };
 
         // Legacy check function replaced by direct calculation
@@ -544,6 +574,11 @@ createApp({
             localStorage.setItem('mj_theme', isDark.value ? 'dark' : 'light');
             if (isDark.value) document.body.classList.add('dark');
             else document.body.classList.remove('dark');
+        };
+
+        // Lock Toggle
+        const toggleLock = () => {
+            isLocked.value = !isLocked.value;
         };
 
         const initTheme = () => {
@@ -1450,6 +1485,7 @@ createApp({
 
         return {
             isDark, toggleTheme,
+            isLocked, toggleLock,
             seats, players, currentRound, dealerIndex, dealerStreak, history, lastDiff,
             modals, closeModal,
             activePlayers, availablePlayers, dialRotation,
@@ -1459,6 +1495,7 @@ createApp({
             undo, handleNextRoundClick, nextRoundCheck, nextRound,
             formatTime, clearData,
             showStats, showHistory: () => modals.value.history = true, showSettings: () => modals.value.settings = true, showRoundModal: () => {},
+            showHelp: () => modals.value.help = true,
             showOriginSet, updateOrigin, setOriginToZero,
             // Zoom
             adjustScale, globalScale, canZoomIn, canZoomOut,

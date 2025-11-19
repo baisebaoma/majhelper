@@ -26,6 +26,11 @@ body {
     height: 100dvh;
     overflow: hidden;
     user-select: none;
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none; /* Firefox */
+    -ms-user-select: none; /* IE10+/Edge */
+    /* 禁用双击缩放 */
+    touch-action: manipulation;
 }
 body.dark {
     color: var(--text-dark);
@@ -90,10 +95,43 @@ body.dark .header { background: rgba(0,0,0,0.3); }
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    position: relative; /* For tooltip */
 }
 .icon-btn:hover { background: rgba(0,0,0,0.05); }
 .icon-btn.disabled { opacity: 0.3; cursor: not-allowed; }
 body.dark .icon-btn:hover { background: rgba(255,255,255,0.1); }
+
+/* Tooltip Styles */
+@media (hover: hover) {
+    .icon-btn[data-tooltip]:hover::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-top: 8px;
+        padding: 4px 8px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        font-size: 12px;
+        border-radius: 4px;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        animation: tooltip-fade 0.2s forwards;
+        z-index: 100;
+    }
+    
+    body.dark .icon-btn[data-tooltip]:hover::after {
+        background: rgba(255, 255, 255, 0.9);
+        color: black;
+    }
+}
+
+@keyframes tooltip-fade {
+    from { opacity: 0; transform: translate(-50%, -5px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
 
 /* 游戏区域 */
 .game-area {
@@ -142,17 +180,11 @@ body.dark .center-dial {
     font-weight: bold;
     color: #9ca3af;
     transition: color 0.3s;
+    z-index: 1; /* 确保在骰子下方 */
 }
 /* 只有东(0)是红色，其他默认 */
 .direction.is-east { 
     color: var(--danger); 
-    text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
-    animation: east-breath 3s ease-in-out infinite;
-}
-
-@keyframes east-breath {
-    0%, 100% { text-shadow: 0 0 10px rgba(239, 68, 68, 0.5); opacity: 1; }
-    50% { text-shadow: 0 0 25px rgba(239, 68, 68, 0.9), 0 0 5px rgba(239, 68, 68, 0.8); opacity: 0.9; }
 }
 
 /* 增加边距，往外移 */
@@ -289,13 +321,6 @@ body.dark .drag-clone.next-round-clone {
 .player-card.active.pos-1 { transform: translateY(-50%) rotate(-90deg) scale(calc(var(--scale-factor, 1) * 1.05)); }
 .player-card.active.pos-2 { transform: rotate(180deg) scale(calc(var(--scale-factor, 1) * 1.05)); }
 .player-card.active.pos-3 { transform: translateY(-50%) rotate(90deg) scale(calc(var(--scale-factor, 1) * 1.05)); }
-
-.player-card.dealer {
-    /* border-color: var(--danger);  移除红色边框 */
-}
-body.dark .player-card.dealer {
-    /* 保持默认阴影，不加光条 */
-}
 
 /* 庄家标记 */
 .dealer-badge {
@@ -528,6 +553,7 @@ body.dark .center-dial.dice-mode {
     left: 50%;
     transform: translate(-50%, -50%);
     transition: opacity 0.5s 0.2s; /* 延迟显示，等圆盘变大 */
+    z-index: 10; /* 确保在方向指示上方 */
 }
 .center-dial.dice-mode .dice-container {
     opacity: 1;
