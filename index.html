@@ -17,6 +17,12 @@
                 第 {{ currentRound }} 局
             </div>
             <div class="header-actions">
+                <button class="icon-btn" @click="adjustScale(-1)" :class="{ disabled: !canZoomOut }">
+                    <i class="fas fa-minus"></i>
+                </button>
+                <button class="icon-btn" @click="adjustScale(1)" :class="{ disabled: !canZoomIn }">
+                    <i class="fas fa-plus"></i>
+                </button>
                 <button class="icon-btn" @click="toggleTheme">
                     <i class="fas" :class="isDark ? 'fa-sun' : 'fa-moon'"></i>
                 </button>
@@ -44,7 +50,9 @@
                      'is-rolling': diceMode && isRolling,
                      'roll-finished': diceMode && !isRolling && hasRolled
                  }"
-                 :style="{ transform: diceMode ? '' : `rotate(${dialRotation}deg)` }"
+                 :style="{ 
+                     transform: diceMode ? '' : `rotate(${dialRotation}deg) scale(${globalScale})` 
+                 }"
                  @click="handleDialClick">
                 <!-- 只有当该方向对应的是东(dealerIndex)时才高亮 -->
                 <div class="direction dir-0 is-east">東</div>
@@ -58,20 +66,20 @@
                 <!-- 骰子容器 -->
                 <div class="dice-container">
                     <div class="dice-box" :style="diceStyles[0]">
-                        <div class="dice-face face-1"><div class="dice-face-inner"><div class="dot red" style="grid-area: 2/2;"></div></div></div>
-                        <div class="dice-face face-2"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 3/1;"></div></div></div>
-                        <div class="dice-face face-3"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/2;"></div><div class="dot" style="grid-area: 3/1;"></div></div></div>
-                        <div class="dice-face face-4"><div class="dice-face-inner"><div class="dot red" style="grid-area: 1/1;"></div><div class="dot red" style="grid-area: 1/3;"></div><div class="dot red" style="grid-area: 3/1;"></div><div class="dot red" style="grid-area: 3/3;"></div></div></div>
-                        <div class="dice-face face-5"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/1;"></div><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/2;"></div><div class="dot" style="grid-area: 3/1;"></div><div class="dot" style="grid-area: 3/3;"></div></div></div>
-                        <div class="dice-face face-6"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/1;"></div><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/1;"></div><div class="dot" style="grid-area: 2/3;"></div><div class="dot" style="grid-area: 3/1;"></div><div class="dot" style="grid-area: 3/3;"></div></div></div>
+                        <div class="dice-face face-1"></div>
+                        <div class="dice-face face-2"></div>
+                        <div class="dice-face face-3"></div>
+                        <div class="dice-face face-4"></div>
+                        <div class="dice-face face-5"></div>
+                        <div class="dice-face face-6"></div>
                     </div>
                     <div class="dice-box" :style="diceStyles[1]">
-                        <div class="dice-face face-1"><div class="dice-face-inner"><div class="dot red" style="grid-area: 2/2;"></div></div></div>
-                        <div class="dice-face face-2"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 3/1;"></div></div></div>
-                        <div class="dice-face face-3"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/2;"></div><div class="dot" style="grid-area: 3/1;"></div></div></div>
-                        <div class="dice-face face-4"><div class="dice-face-inner"><div class="dot red" style="grid-area: 1/1;"></div><div class="dot red" style="grid-area: 1/3;"></div><div class="dot red" style="grid-area: 3/1;"></div><div class="dot red" style="grid-area: 3/3;"></div></div></div>
-                        <div class="dice-face face-5"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/1;"></div><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/2;"></div><div class="dot" style="grid-area: 3/1;"></div><div class="dot" style="grid-area: 3/3;"></div></div></div>
-                        <div class="dice-face face-6"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/1;"></div><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/1;"></div><div class="dot" style="grid-area: 2/3;"></div><div class="dot" style="grid-area: 3/1;"></div><div class="dot" style="grid-area: 3/3;"></div></div></div>
+                        <div class="dice-face face-1"></div>
+                        <div class="dice-face face-2"></div>
+                        <div class="dice-face face-3"></div>
+                        <div class="dice-face face-4"></div>
+                        <div class="dice-face face-5"></div>
+                        <div class="dice-face face-6"></div>
                     </div>
                 </div>
             </div>
@@ -86,6 +94,7 @@
                      { 'drag-over': dragState.overIndex === index && (dragState.fromIndex !== index || dragState.draggingNextRound) && (seat || dragState.draggingNextRound) },
                      { 'empty-seat': !seat }
                  ]"
+                 :style="{ '--scale-factor': globalScale }"
                  :draggable="seat ? true : false"
                  @click="handleSeatClick(index)"
                  @dragstart="handleDragStart(index, $event)"

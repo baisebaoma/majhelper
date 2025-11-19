@@ -98,6 +98,100 @@ createApp({
         // 两个骰子的当前旋转角度
         const diceRotation = ref([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
 
+        // Zoom State
+        const globalScale = ref(1);
+        const canZoomIn = ref(true);
+        const canZoomOut = ref(true);
+        const scaleStep = 0.20; // 每次调整百分之多少
+        const maxScaleMultiplier = 2.0; // 最大缩放倍数（相对于计算出的安全值）- 在这里调整！
+        const absoluteMaxScale = 2.0; // 绝对最大缩放限制（无论计算值多大，都不超过这个值）- 在这里调整！
+        
+        const adjustScale = (direction) => {
+            // Calculate potential new scale
+            const proposedScale = globalScale.value + (direction * scaleStep);
+            
+            if (direction > 0) {
+                // Zoom In
+                if (!canZoomIn.value) return;
+                
+                // Calculate Max Possible Scale based on current DOM state
+                const maxScale = calculateMaxScale();
+                
+                if (proposedScale >= maxScale) {
+                    // If proposed step exceeds max, clamp to max and disable zoom in
+                    globalScale.value = maxScale;
+                    canZoomIn.value = false;
+                } else {
+                    globalScale.value = proposedScale;
+                }
+                canZoomOut.value = true;
+            } else {
+                // Zoom Out
+                if (!canZoomOut.value) return;
+                
+                if (proposedScale < 0.5) {
+                    globalScale.value = 0.5;
+                    canZoomOut.value = false;
+                    return;
+                }
+                
+                globalScale.value = proposedScale;
+                canZoomIn.value = true;
+                canZoomOut.value = proposedScale > 0.5;
+            }
+        };
+        
+        // Calculate the maximum scale allowed before collision or overflow
+        const calculateMaxScale = () => {
+            const card0 = document.querySelector('.pos-0');
+            const dial = document.querySelector('.center-dial');
+            
+            if (!card0 || !dial) return absoluteMaxScale; // Fallback max if DOM not ready
+            
+            const H = card0.offsetHeight;
+            // Use offsetWidth for dial diameter
+            const dialRadius = dial.offsetWidth / 2;
+            const windowH = window.innerHeight;
+            
+            // Get Card0 Bottom position
+            const style = window.getComputedStyle(card0);
+            let bottomVal = parseFloat(style.bottom);
+            if (isNaN(bottomVal)) bottomVal = 20; // fallback
+            
+            // Card Center Y relative to screen bottom
+            const centerY_fromBottom = bottomVal + H / 2;
+            
+            // Distance from Card Center to Screen Center
+            const distToCenter = (windowH / 2) - centerY_fromBottom;
+            
+            // Constraint 1: Screen Bottom Edge
+            // Visual Bottom = CenterY - (H * s / 2)
+            // We want Visual Bottom >= 5px
+            // CenterY - H*s/2 >= 5  =>  CenterY - 5 >= H*s/2  =>  s <= (CenterY - 5) * 2 / H
+            const maxScaleEdge = (centerY_fromBottom - 5) * 2 / H;
+            
+            // Constraint 2: Dial Collision
+            // Visual Top = CenterY + (H * s / 2) (relative to bottom)
+            // Dial Bottom Edge = (ScreenH / 2) - (DialRadius * s)
+            // We want Visual Top <= Dial Bottom Edge - 5px
+            // CenterY + H*s/2 <= (ScreenH/2) - DialRadius*s - 5
+            // H*s/2 + DialRadius*s <= (ScreenH/2) - CenterY - 5
+            // s * (H/2 + DialRadius) <= distToCenter - 5
+            // s <= (distToCenter - 5) / (H/2 + DialRadius)
+            const maxScaleCollision = (distToCenter - 5) / (H / 2 + dialRadius);
+            
+            // Calculate the base max scale (stricter constraint)
+            const calculatedMax = Math.min(maxScaleEdge, maxScaleCollision);
+            
+            // Apply multiplier and cap at absolute maximum
+            return Math.min(calculatedMax * maxScaleMultiplier, absoluteMaxScale);
+        };
+
+        // Legacy check function replaced by direct calculation
+        const checkCollision = (scale) => {
+            return scale > calculateMaxScale();
+        };
+
         const diceStyles = computed(() => {
             return diceRotation.value.map((rot) => {
                 // 如果正在动画中，使用动态生成的随机时间；否则使用复位时间
@@ -173,16 +267,19 @@ createApp({
             
             // 取最大的时间作为结束时间
             const maxDuration = Math.max(duration1, duration2);
+            
+            // 提前解锁交互的时间量 (ms)
+            const leadTime = 800;
 
             diceRotation.value = [
                 { ...calculateDiceRotation(0, v1, minSpins), duration: duration1 },
                 { ...calculateDiceRotation(1, v2, minSpins), duration: duration2 }
             ];
             
-            // 提前 500ms 解锁交互并显示绿光（让用户感觉已经停了）
+            // 提前 leadTime 解锁交互并显示绿光（让用户感觉已经停了）
             setTimeout(() => {
                 isRolling.value = false;
-            }, Math.max(0, maxDuration - 500));
+            }, Math.max(0, maxDuration - leadTime));
 
             // 动画实际结束后，重置动画状态（恢复 CSS transition 到短时间复位模式）
             setTimeout(() => {
@@ -517,15 +614,14 @@ createApp({
             
             dragClone = createNextRoundClone(event.clientX, event.clientY);
             
-            const onDocumentDrag = (e) => {
-                if (e.clientX !== 0 || e.clientY !== 0) {
-                    updateDragClone(e.clientX, e.clientY);
-                }
+            const onDocumentDragOver = (e) => {
+                e.preventDefault();
+                updateDragClone(e.clientX, e.clientY);
             };
-            document.addEventListener('drag', onDocumentDrag);
+            document.addEventListener('dragover', onDocumentDragOver);
             
             const cleanup = () => {
-                document.removeEventListener('drag', onDocumentDrag);
+                document.removeEventListener('dragover', onDocumentDragOver);
                 document.removeEventListener('dragend', cleanup);
             };
             document.addEventListener('dragend', cleanup);
@@ -815,17 +911,15 @@ createApp({
             // Create clone at cursor position with proper rotation
             dragClone = createDragClone(seat, event.clientX, event.clientY, index);
             
-            // Add document-level drag listener to track cursor position everywhere
-            const onDocumentDrag = (e) => {
-                if (e.clientX !== 0 || e.clientY !== 0) {
-                    updateDragClone(e.clientX, e.clientY);
-                }
+            // Add document-level dragover listener to track cursor position everywhere with high frequency
+            const onDocumentDragOver = (e) => {
+                e.preventDefault(); // Allow drop and ensure continuous events
+                updateDragClone(e.clientX, e.clientY);
             };
-            document.addEventListener('drag', onDocumentDrag);
+            document.addEventListener('dragover', onDocumentDragOver);
             
-            // Clean up on drag end
             const cleanup = () => {
-                document.removeEventListener('drag', onDocumentDrag);
+                document.removeEventListener('dragover', onDocumentDragOver);
                 document.removeEventListener('dragend', cleanup);
             };
             document.addEventListener('dragend', cleanup);
@@ -873,6 +967,13 @@ createApp({
 
         const handleDrop = (toIndex, event) => {
             event.preventDefault();
+
+            // Fix: If dragging "Next Round" button, do not process here and do not clear state.
+            // The logic is handled in handleNextRoundDragEnd using the overIndex state.
+            if (dragState.value.draggingNextRound) {
+                return;
+            }
+
             const fromIndex = parseInt(event.dataTransfer.getData('text/plain'));
             
             const fromSeat = seats.value[fromIndex];
@@ -1206,6 +1307,8 @@ createApp({
             formatTime, clearData,
             showStats, showHistory: () => modals.value.history = true, showSettings: () => modals.value.settings = true, showRoundModal: () => {},
             showOriginSet, updateOrigin, setOriginToZero,
+            // Zoom
+            adjustScale, globalScale, canZoomIn, canZoomOut,
             // Drag and Drop (Player Cards)
             dragState,
             handleDragStart, handleDragEnd, handleDragOver, handleDragLeave, handleDrop,
