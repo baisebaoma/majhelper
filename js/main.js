@@ -102,7 +102,7 @@ createApp({
         const globalScale = ref(1);
         const canZoomIn = ref(true);
         const canZoomOut = ref(true);
-        const scaleStep = 0.20; // 每次调整百分之多少
+        const scaleStep = 0.10; // 每次调整百分之多少
         const maxScaleMultiplier = 2.0; // 最大缩放倍数（相对于计算出的安全值）- 在这里调整！
         const absoluteMaxScale = 2.0; // 绝对最大缩放限制（无论计算值多大，都不超过这个值）- 在这里调整！
         
