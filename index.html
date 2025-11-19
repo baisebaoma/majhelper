@@ -438,6 +438,117 @@
         body.dark .list-item { background: #374151; }
         .list-item.active { background: var(--primary); color: white; }
 
+        
+        /* 骰子相关样式 */
+        .center-dial.dice-mode {
+            transform: scale(2.5) !important;
+            z-index: 101;
+            border-color: rgba(255,255,255,0.2);
+            background: rgba(40, 40, 60, 0.95);
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s, border-color 0.3s;
+        }
+        
+        .center-dial.dice-mode.is-rolling {
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.6) !important;
+            border-color: rgba(239, 68, 68, 0.8);
+        }
+        
+        .center-dial.dice-mode.roll-finished {
+            box-shadow: 0 0 40px rgba(16, 185, 129, 0.6) !important;
+            border-color: rgba(16, 185, 129, 0.8);
+        }
+
+        body.dark .center-dial.dice-mode {
+            background: rgba(20, 20, 30, 0.95);
+        }
+
+        .center-dial.dice-mode .direction,
+        .center-dial.dice-mode .dial-round {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .dice-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .dice-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .dice-container {
+            display: flex;
+            gap: 12px;
+            opacity: 0;
+            pointer-events: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: opacity 0.5s 0.2s; /* 延迟显示，等圆盘变大 */
+        }
+        .center-dial.dice-mode .dice-container {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .dice-box {
+            width: 30px;
+            height: 30px;
+            position: relative;
+            transform-style: preserve-3d;
+            /* 过渡时间由JS动态控制 */
+        }
+
+        .dice-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #f9fafb;
+            border-radius: 4px;
+            border: 1px solid #d1d5db;
+            box-shadow: inset 0 0 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backface-visibility: hidden;
+        }
+        
+        .dice-face-inner {
+            width: 100%;
+            height: 100%;
+            padding: 3px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+        }
+        .dot {
+            background-color: #333;
+            border-radius: 50%;
+            width: 6px;
+            height: 6px;
+            align-self: center;
+            justify-self: center;
+        }
+        .dot.red { background-color: #ef4444; } 
+        
+        /* 面位置定义 (尺寸30px, 偏移15px) */
+        .face-1 { transform: rotateY(0deg) translateZ(15px); }
+        .face-6 { transform: rotateY(180deg) translateZ(15px); }
+        .face-3 { transform: rotateY(90deg) translateZ(15px); }
+        .face-4 { transform: rotateY(-90deg) translateZ(15px); }
+        .face-5 { transform: rotateX(90deg) translateZ(15px); }
+        .face-2 { transform: rotateX(-90deg) translateZ(15px); }
+
         /* 动画 */
         .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
         .fade-enter-from, .fade-leave-to { opacity: 0; }
@@ -588,8 +699,18 @@
 
         <!-- 游戏主区域 -->
         <main class="game-area">
+            <!-- 骰子模式遮罩 -->
+            <div class="dice-overlay" :class="{ show: diceMode }" @click="closeDiceMode"></div>
+
             <!-- 中间转盘 -->
-            <div class="center-dial" :style="{ transform: `rotate(${dialRotation}deg)` }">
+            <div class="center-dial" 
+                 :class="{ 
+                     'dice-mode': diceMode,
+                     'is-rolling': diceMode && isRolling,
+                     'roll-finished': diceMode && !isRolling && hasRolled
+                 }"
+                 :style="{ transform: diceMode ? 'scale(2.5)' : `rotate(${dialRotation}deg)` }"
+                 @click="handleDialClick">
                 <!-- 只有当该方向对应的是东(dealerIndex)时才高亮 -->
                 <div class="direction dir-0 is-east">東</div>
                 <div class="direction dir-1">南</div>
@@ -598,6 +719,26 @@
                 
                 <!-- 数字直接显示，跟随父容器旋转，正对庄家 -->
                 <div class="dial-round">{{ currentRound }}</div>
+
+                <!-- 骰子容器 -->
+                <div class="dice-container">
+                    <div class="dice-box" :style="diceStyles[0]">
+                        <div class="dice-face face-1"><div class="dice-face-inner"><div class="dot red" style="grid-area: 2/2;"></div></div></div>
+                        <div class="dice-face face-2"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 3/1;"></div></div></div>
+                        <div class="dice-face face-3"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/2;"></div><div class="dot" style="grid-area: 3/1;"></div></div></div>
+                        <div class="dice-face face-4"><div class="dice-face-inner"><div class="dot red" style="grid-area: 1/1;"></div><div class="dot red" style="grid-area: 1/3;"></div><div class="dot red" style="grid-area: 3/1;"></div><div class="dot red" style="grid-area: 3/3;"></div></div></div>
+                        <div class="dice-face face-5"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/1;"></div><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/2;"></div><div class="dot" style="grid-area: 3/1;"></div><div class="dot" style="grid-area: 3/3;"></div></div></div>
+                        <div class="dice-face face-6"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/1;"></div><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/1;"></div><div class="dot" style="grid-area: 2/3;"></div><div class="dot" style="grid-area: 3/1;"></div><div class="dot" style="grid-area: 3/3;"></div></div></div>
+                    </div>
+                    <div class="dice-box" :style="diceStyles[1]">
+                        <div class="dice-face face-1"><div class="dice-face-inner"><div class="dot red" style="grid-area: 2/2;"></div></div></div>
+                        <div class="dice-face face-2"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 3/1;"></div></div></div>
+                        <div class="dice-face face-3"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/2;"></div><div class="dot" style="grid-area: 3/1;"></div></div></div>
+                        <div class="dice-face face-4"><div class="dice-face-inner"><div class="dot red" style="grid-area: 1/1;"></div><div class="dot red" style="grid-area: 1/3;"></div><div class="dot red" style="grid-area: 3/1;"></div><div class="dot red" style="grid-area: 3/3;"></div></div></div>
+                        <div class="dice-face face-5"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/1;"></div><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/2;"></div><div class="dot" style="grid-area: 3/1;"></div><div class="dot" style="grid-area: 3/3;"></div></div></div>
+                        <div class="dice-face face-6"><div class="dice-face-inner"><div class="dot" style="grid-area: 1/1;"></div><div class="dot" style="grid-area: 1/3;"></div><div class="dot" style="grid-area: 2/1;"></div><div class="dot" style="grid-area: 2/3;"></div><div class="dot" style="grid-area: 3/1;"></div><div class="dot" style="grid-area: 3/3;"></div></div></div>
+                    </div>
+                </div>
             </div>
 
             <!-- 玩家卡片 -->
@@ -783,6 +924,9 @@
                         <div style="margin-bottom: 8px;">
                             <strong>🔄 自动换庄：</strong>点击"下一局"按钮，自动换庄到下一家并进入下一局
                         </div>
+                        <div style="margin-bottom: 8px;">
+                            <strong>🎲 打骰子：</strong>点击中间圆盘进入骰子模式，再次点击进行掷骰子
+                        </div>
                         <div>
                             <strong>↩️ 撤销操作：</strong>点击"撤销"按钮可撤销上一次结算
                         </div>
@@ -935,6 +1079,151 @@
 
                 // Chart
                 let chartInstance = null;
+
+                // Dice State
+                const diceMode = ref(false);
+                const isRolling = ref(false);
+                const isAnimating = ref(false);
+                const hasRolled = ref(false);
+                // 两个骰子的当前旋转角度
+                const diceRotation = ref([{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+
+                const diceStyles = computed(() => {
+                    return diceRotation.value.map((rot) => {
+                        // 如果正在动画中，使用动态生成的随机时间；否则使用复位时间
+                        // isAnimating 保持整个动画周期的 true，确保 easing 曲线不中断
+                        const transitionTime = isAnimating.value ? `${rot.duration}ms` : '0.5s';
+                        return {
+                            transform: `rotateX(${rot.x}deg) rotateY(${rot.y}deg)`,
+                            transition: `transform ${transitionTime} cubic-bezier(0.1, 0.9, 0.2, 1)`
+                        };
+                    });
+                });
+
+                const handleDialClick = () => {
+                    if (!diceMode.value) {
+                        // 进入骰子模式
+                        diceMode.value = true;
+                        hasRolled.value = false;
+                        resetDice(); 
+                    } else {
+                        // 已经在骰子模式
+                        if (isRolling.value) return; // 正在滚动交互锁定中，忽略
+                        // 开始掷骰子
+                        rollDice();
+                    }
+                };
+
+                const closeDiceMode = () => {
+                    if (isRolling.value) return; // 正在滚动交互锁定中，不可退出
+                    // 只要不在滚动中，点击外部都可以退出（包括没打骰子前，和打完骰子后）
+                    diceMode.value = false;
+                };
+
+                const resetDice = () => {
+                    // 随机生成初始点数
+                    const v1 = Math.floor(Math.random() * 6) + 1;
+                    const v2 = Math.floor(Math.random() * 6) + 1;
+                    
+                    const getBaseAngle = (val) => {
+                        switch(val) {
+                            case 1: return { x: 0, y: 0 };
+                            case 2: return { x: 90, y: 0 };
+                            case 3: return { x: 0, y: -90 };
+                            case 4: return { x: 0, y: 90 };
+                            case 5: return { x: -90, y: 0 };
+                            case 6: return { x: 0, y: 180 };
+                            default: return { x: 0, y: 0 };
+                        }
+                    };
+
+                    const base1 = getBaseAngle(v1);
+                    const base2 = getBaseAngle(v2);
+
+                     diceRotation.value = [
+                         { x: base1.x + Math.random() * 20 - 10, y: base1.y + Math.random() * 20 - 10 },
+                         { x: base2.x + Math.random() * 20 - 10, y: base2.y + Math.random() * 20 - 10 }
+                     ];
+                };
+
+                const rollDice = () => {
+                    isRolling.value = true;     // 锁定交互，显示红光
+                    isAnimating.value = true;   // 开始动画 CSS
+                    hasRolled.value = true;
+                    
+                    const v1 = Math.floor(Math.random() * 6) + 1;
+                    const v2 = Math.floor(Math.random() * 6) + 1;
+                    
+                    // 基础圈数调整
+                    const minSpins = 4; 
+                    
+                    // 生成1000ms到2500ms之间的随机时间
+                    const duration1 = Math.floor(Math.random() * 1500) + 1000;
+                    const duration2 = Math.floor(Math.random() * 1500) + 1000;
+                    
+                    // 取最大的时间作为结束时间
+                    const maxDuration = Math.max(duration1, duration2);
+
+                    diceRotation.value = [
+                        { ...calculateDiceRotation(0, v1, minSpins), duration: duration1 },
+                        { ...calculateDiceRotation(1, v2, minSpins), duration: duration2 }
+                    ];
+                    
+                    // 提前 500ms 解锁交互并显示绿光（让用户感觉已经停了）
+                    setTimeout(() => {
+                        isRolling.value = false;
+                    }, Math.max(0, maxDuration - 500));
+
+                    // 动画实际结束后，重置动画状态（恢复 CSS transition 到短时间复位模式）
+                    setTimeout(() => {
+                        isAnimating.value = false;
+                    }, maxDuration);
+                };
+                
+                const calculateDiceRotation = (index, value, minSpins) => {
+                    // 获取当前角度
+                    const current = diceRotation.value[index];
+                    
+                    // 目标基础角度
+                    let baseX = 0, baseY = 0;
+                    switch(value) {
+                        case 1: baseX = 0; baseY = 0; break;
+                        case 2: baseX = 90; baseY = 0; break;
+                        case 3: baseX = 0; baseY = -90; break;
+                        case 4: baseX = 0; baseY = 90; break;
+                        case 5: baseX = -90; baseY = 0; break;
+                        case 6: baseX = 0; baseY = 180; break;
+                    }
+                    
+                    // 计算下一个角度，确保是在当前基础上累加，且至少转 minSpins 圈
+                    // 1. 计算当前角度相对于360的余数，以便找到去往 baseX 的最短正向路径
+                    // 实际上，我们只需要确保 delta 是正的即可
+                    
+                    const calcNextAngle = (currAngle, baseAngle) => {
+                        // 当前角度
+                        const curr = currAngle;
+                        // 目标余数
+                        const targetMod = baseAngle; 
+                        // 当前余数
+                        const currMod = curr % 360;
+                        
+                        // 计算差值：我们需要加多少才能到达下一个 targetMod
+                        let delta = targetMod - currMod;
+                        
+                        // 确保 delta > 0，保证正向旋转
+                        while (delta <= 0) delta += 360;
+                        
+                        // 加上基础差值后，再额外加随机圈数
+                        const extraSpins = Math.floor(Math.random() * 3) + minSpins;
+                        
+                        return curr + delta + (extraSpins * 360);
+                    };
+                    
+                    return { 
+                        x: calcNextAngle(current.x, baseX),
+                        y: calcNextAngle(current.y, baseY)
+                    };
+                };
 
                 // --- Computed ---
                 const activePlayers = computed(() => seats.value.filter(n => n));
@@ -1822,7 +2111,10 @@
                     handleNextRoundDragStart, handleNextRoundDragEnd,
                     handleNextRoundTouchStart, handleNextRoundTouchMove, handleNextRoundTouchEnd,
                     // Quick Settle
-                    quickSettle, quickAmountInput, confirmQuickSettle, cancelQuickSettle
+                    quickSettle, quickAmountInput, confirmQuickSettle, cancelQuickSettle,
+                    
+                    // Dice
+                    diceMode, isRolling, hasRolled, diceStyles, handleDialClick, closeDiceMode
                 };
             }
         }).mount('#app');
