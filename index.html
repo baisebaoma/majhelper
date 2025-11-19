@@ -32,6 +32,8 @@
             color: var(--text-light);
             transition: color 0.3s;
             height: 100vh;
+            /* 尝试使用 dvh 解决 Safari 底部遮挡问题 */
+            height: 100dvh;
             overflow: hidden;
             user-select: none;
         }
@@ -48,12 +50,12 @@
             margin: 0 auto;
             position: relative;
             /* 默认背景色在这里定义 */
-            background: #007b43;
+            background: var(--bg-light);
             transition: background 0.3s;
             background-size: cover;
             background-position: center;
         }
-        #app.dark {
+        body.dark #app {
             background: var(--bg-dark);
         }
 
@@ -66,6 +68,8 @@
             background: rgba(255,255,255,0.5);
             backdrop-filter: blur(10px);
             z-index: 10;
+            /* 适配刘海屏 */
+            padding-top: max(12px, env(safe-area-inset-top));
         }
         body.dark .header { background: rgba(0,0,0,0.3); }
 
@@ -164,15 +168,94 @@
             flex-direction: column;
             align-items: center;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: pointer;
+            cursor: grab;
             border: 2px solid transparent;
+            touch-action: none; /* 防止移动端默认行为 */
         }
         body.dark .player-card { background: var(--card-dark); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); }
+        
+        /* 拖拽状态 */
+        .player-card.dragging {
+            opacity: 0.3;
+            cursor: grabbing;
+        }
+        .player-card.drag-over {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.2);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.5);
+        }
+        .player-card.empty-seat {
+            cursor: pointer;
+        }
+        
+        /* 拖拽分身 */
+        .drag-clone {
+            position: fixed;
+            width: 160px;
+            padding: 16px;
+            background: var(--card-light);
+            backdrop-filter: blur(12px);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.08s ease-out;
+            border: 2px solid var(--primary);
+            will-change: transform, left, top;
+        }
+        body.dark .drag-clone {
+            background: var(--card-dark);
+        }
+        .drag-clone.show {
+            opacity: 0.5;
+        }
+        .drag-clone .player-name {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            opacity: 0.8;
+        }
+        .drag-clone .player-score {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--primary);
+        }
+        
+        /* 下一局拖拽分身 */
+        .drag-clone.next-round-clone {
+            background: var(--secondary);
+            border-color: var(--secondary);
+            color: white;
+        }
+        body.dark .drag-clone.next-round-clone {
+            background: var(--secondary);
+            border-color: var(--secondary);
+        }
+        .drag-clone.next-round-clone .clone-text {
+            font-size: 20px;
+            font-weight: 700;
+            text-align: center;
+        }
 
         /* 针对不同座位的旋转 */
         .pos-1 { transform: translateY(-50%) rotate(-90deg); }
         .pos-2 { transform: rotate(180deg); }
         .pos-3 { transform: translateY(-50%) rotate(90deg); }
+
+        /* 拖拽状态需要叠加旋转和缩放 */
+        .player-card.dragging.pos-0 { transform: scale(1.1); }
+        .player-card.dragging.pos-1 { transform: translateY(-50%) rotate(-90deg) scale(1.1); }
+        .player-card.dragging.pos-2 { transform: rotate(180deg) scale(1.1); }
+        .player-card.dragging.pos-3 { transform: translateY(-50%) rotate(90deg) scale(1.1); }
+        
+        .player-card.drag-over.pos-0 { transform: scale(1.08); }
+        .player-card.drag-over.pos-1 { transform: translateY(-50%) rotate(-90deg) scale(1.08); }
+        .player-card.drag-over.pos-2 { transform: rotate(180deg) scale(1.08); }
+        .player-card.drag-over.pos-3 { transform: translateY(-50%) rotate(90deg) scale(1.08); }
 
         /* 激活状态需要叠加旋转 */
         .player-card.active.pos-0 { transform: scale(1.05); }
@@ -181,29 +264,31 @@
         .player-card.active.pos-3 { transform: translateY(-50%) rotate(90deg) scale(1.05); }
         
         .player-card.dealer { border-color: var(--danger); }
-        .player-card.dealer::before {
-            content: '庄';
+        
+        /* 庄家标记 */
+        .dealer-badge {
             position: absolute;
-            top: -10px;
-            right: -10px;
-            width: 24px;
-            height: 24px;
+            top: -12px;
+            right: -12px;
+            width: 32px;
+            height: 32px;
             background: var(--danger);
             color: white;
             border-radius: 50%;
-            font-size: 12px;
+            font-size: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: bold;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
             z-index: 2;
+            font-weight: 700;
         }
 
         /* 响应式定位修正 */
         .pos-0 { bottom: 20px; }
         .pos-1 { right: -20px; top: 50%; } /* 右侧稍微靠外一点，因为旋转了 */
-        .pos-2 { top: 80px; } 
+        /* 修正上方玩家位置，使其与边缘距离一致 */
+        .pos-2 { top: 20px; } 
         .pos-3 { left: -20px; top: 50%; } /* 左侧稍微靠外一点 */
 
         /* 强制竖屏逻辑 */
@@ -248,6 +333,8 @@
         /* 底部操作栏 */
         .action-bar {
             padding: 20px;
+            /* 适配底部安全区域 */
+            padding-bottom: max(20px, env(safe-area-inset-bottom));
             display: flex;
             gap: 12px;
             justify-content: center;
@@ -269,6 +356,8 @@
             align-items: center;
             gap: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            /* 防止文字换行 */
+            white-space: nowrap;
         }
         .btn:active { transform: scale(0.96); }
         
@@ -278,6 +367,15 @@
         body.dark .btn-secondary { background: var(--card-dark); color: var(--text-dark); }
         .btn-danger { background: var(--danger); color: white; }
         .btn-warning { background: var(--warning); color: white; }
+        
+        /* 下一局按钮拖拽状态 */
+        .next-round-btn {
+            cursor: grab;
+        }
+        .next-round-btn.dragging {
+            opacity: 0.3;
+            cursor: grabbing;
+        }
 
         /* 模态框 */
         .modal-overlay {
@@ -380,10 +478,93 @@
 
         /* 统计图表容器 */
         .chart-container { position: relative; height: 300px; width: 100%; }
+        
+        /* 帮助说明区域 */
+        .help-section {
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            border: 1px solid #e5e7eb;
+        }
+        body.dark .help-section {
+            background: #374151;
+            border-color: #4b5563;
+        }
+        
+        /* 快速结算背景遮罩 */
+        .quick-settle-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 199;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .quick-settle-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        /* 快速结算输入框 */
+        .quick-settle-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: white;
+            border-radius: 24px;
+            padding: 32px 24px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            z-index: 200;
+            min-width: 300px;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        body.dark .quick-settle-modal { background: #1f2937; border: 1px solid rgba(255,255,255,0.1); }
+        .quick-settle-modal.show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        
+        .quick-settle-title {
+            font-size: 18px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+        
+        .quick-settle-amount {
+            width: 100%;
+            padding: 16px;
+            border-radius: 16px;
+            border: 3px solid var(--primary);
+            background: #f9fafb;
+            font-size: 32px;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 20px;
+            color: var(--primary);
+        }
+        body.dark .quick-settle-amount { background: #374151; color: var(--primary); }
+        .quick-settle-amount:focus { outline: none; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2); }
+        
+        .quick-settle-actions {
+            display: flex;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
-    <div id="app" :class="{ dark: isDark }">
+    <div id="app">
         <!-- 顶部栏 -->
         <header class="header">
             <div class="round-badge" @click="showRoundModal">
@@ -422,8 +603,29 @@
             <!-- 玩家卡片 -->
             <div v-for="(seat, index) in seats" :key="index" 
                  class="player-card" 
-                 :class="[`pos-${index}`, { dealer: dealerIndex === index }]"
-                 @click="handleSeatClick(index)">
+                 :class="[
+                     `pos-${index}`, 
+                     { dealer: dealerIndex === index },
+                     { dragging: dragState.dragging && dragState.fromIndex === index && !dragState.draggingNextRound },
+                     { 'drag-over': dragState.overIndex === index && (dragState.fromIndex !== index || dragState.draggingNextRound) && (seat || dragState.draggingNextRound) },
+                     { 'empty-seat': !seat }
+                 ]"
+                 :draggable="seat ? true : false"
+                 @click="handleSeatClick(index)"
+                 @dragstart="handleDragStart(index, $event)"
+                 @dragend="handleDragEnd"
+                 @dragover="handleDragOver(index, $event)"
+                 @dragleave="handleDragLeave"
+                 @drop="handleDrop(index, $event)"
+                 @touchstart="handleTouchStart(index, $event)"
+                 @touchmove="handleTouchMove($event)"
+                 @touchend="handleTouchEnd($event)">
+                <!-- 庄家标记 -->
+                <div v-if="dealerIndex === index && seat" class="dealer-badge">
+                    <i v-if="dealerStreak === 0" class="fas fa-crown"></i>
+                    <span v-else>{{ dealerStreak }}</span>
+                </div>
+                
                 <div v-if="seat" style="width: 100%; text-align: center;">
                     <div class="player-name">{{ seat }}</div>
                     <div class="player-score">
@@ -447,10 +649,17 @@
             <button class="btn btn-warning" @click="undo" :disabled="history.length === 0" :style="{ opacity: history.length ? 1 : 0.5 }">
                 <i class="fas fa-undo"></i> 撤销
             </button>
-            <button class="btn btn-primary" @click="openSettleModal" style="flex: 1; justify-content: center;">
-                <i class="fas fa-coins"></i> 结算
-            </button>
-            <button class="btn btn-secondary" @click="nextRoundCheck">
+            <button 
+                class="btn btn-secondary next-round-btn" 
+                :class="{ dragging: dragState.draggingNextRound }"
+                draggable="true"
+                @click="handleNextRoundClick"
+                @dragstart="handleNextRoundDragStart"
+                @dragend="handleNextRoundDragEnd"
+                @touchstart="handleNextRoundTouchStart"
+                @touchmove="handleNextRoundTouchMove"
+                @touchend="handleNextRoundTouchEnd"
+                style="flex: 1; justify-content: center;">
                 下一局 <i class="fas fa-chevron-right"></i>
             </button>
         </footer>
@@ -458,8 +667,8 @@
         <!-- 模态框组件 -->
         
         <!-- 1. 结算模态框 -->
-        <div class="modal-overlay" :class="{ show: modals.settle }">
-            <div class="modal-card">
+        <div class="modal-overlay" :class="{ show: modals.settle }" @click="closeModal('settle')">
+            <div class="modal-card" @click.stop>
                 <div class="modal-title">结算分数</div>
                 
                 <div class="settle-grid">
@@ -495,8 +704,8 @@
         </div>
 
         <!-- 2. 选人入座模态框 -->
-        <div class="modal-overlay" :class="{ show: modals.seat }">
-            <div class="modal-card">
+        <div class="modal-overlay" :class="{ show: modals.seat }" @click="closeModal('seat')">
+            <div class="modal-card" @click.stop>
                 <div class="modal-title">选择玩家入座</div>
                 <div class="input-field" style="display: flex; gap: 8px; padding: 4px; border: none; background: transparent;">
                     <input v-model="newPlayerName" class="input-field" placeholder="新玩家名字" style="margin: 0;">
@@ -514,26 +723,9 @@
             </div>
         </div>
 
-        <!-- 3. 下一局确认模态框 -->
-        <div class="modal-overlay" :class="{ show: modals.nextRound }">
-            <div class="modal-card">
-                <div class="modal-title">进入下一局</div>
-                <p style="text-align: center; margin-bottom: 20px; opacity: 0.7;">庄家如何变动？</p>
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <button class="btn btn-secondary" @click="nextRound(true)">
-                        <i class="fas fa-exchange-alt"></i> 换庄 (下家做庄)
-                    </button>
-                    <button class="btn btn-warning" @click="nextRound(false)">
-                        <i class="fas fa-redo"></i> 连庄 (庄家继续)
-                    </button>
-                    <button class="btn btn-secondary" style="margin-top: 10px;" @click="closeModal('nextRound')">取消</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 4. 历史记录模态框 -->
-        <div class="modal-overlay" :class="{ show: modals.history }">
-            <div class="modal-card">
+        <!-- 3. 历史记录模态框 -->
+        <div class="modal-overlay" :class="{ show: modals.history }" @click="closeModal('history')">
+            <div class="modal-card" @click.stop>
                 <div class="modal-title">历史记录</div>
                 <div v-if="history.length === 0" style="text-align: center; opacity: 0.5; padding: 20px;">暂无记录</div>
                 <div v-else style="max-height: 400px; overflow-y: auto;">
@@ -548,36 +740,67 @@
                         </div>
                     </div>
                 </div>
-                <button class="btn btn-secondary" style="width: 100%; margin-top: 16px;" @click="closeModal('history')">关闭</button>
+                <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" @click="closeModal('history')">
+                    <i class="fas fa-check"></i> 关闭
+                </button>
             </div>
         </div>
 
-        <!-- 5. 统计图表模态框 -->
-        <div class="modal-overlay" :class="{ show: modals.stats }">
-            <div class="modal-card" style="max-width: 600px; width: 95%;">
+        <!-- 4. 统计图表模态框 -->
+        <div class="modal-overlay" :class="{ show: modals.stats }" @click="closeModal('stats')">
+            <div class="modal-card" style="max-width: 600px; width: 95%;" @click.stop>
                 <div class="modal-title">分数走势</div>
                 <div class="chart-container">
                     <canvas id="scoreChart"></canvas>
                 </div>
-                <button class="btn btn-secondary" style="width: 100%; margin-top: 16px;" @click="closeModal('stats')">关闭</button>
+                <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" @click="closeModal('stats')">
+                    <i class="fas fa-check"></i> 关闭
+                </button>
             </div>
         </div>
 
-        <!-- 6. 设置模态框 -->
-        <div class="modal-overlay" :class="{ show: modals.settings }">
-            <div class="modal-card">
+        <!-- 5. 设置模态框 -->
+        <div class="modal-overlay" :class="{ show: modals.settings }" @click="closeModal('settings')">
+            <div class="modal-card" @click.stop>
                 <div class="modal-title">设置</div>
                 
-                <div class="list-item" @click="clearData" style="color: var(--danger);">
+                <!-- 操作说明 -->
+                <div class="help-section">
+                    <div style="font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-info-circle" style="color: var(--primary);"></i>
+                        <span>操作说明</span>
+                    </div>
+                    <div style="font-size: 14px; line-height: 1.6; opacity: 0.8;">
+                        <div style="margin-bottom: 8px;">
+                            <strong>💰 结算分数：</strong>拖动玩家A到玩家B，输入金额后确认（A给B分数）
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <strong>👑 指定初始庄家：</strong>在未坐满前，拖动"下一局"到任意位置指定初始庄家（不增加局数）
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <strong>🎲 指定庄家：</strong>游戏中，拖动"下一局"到玩家身上进行换庄或连庄
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <strong>🔄 自动换庄：</strong>点击"下一局"按钮，自动换庄到下一家并进入下一局
+                        </div>
+                        <div>
+                            <strong>↩️ 撤销操作：</strong>点击"撤销"按钮可撤销上一次结算
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="list-item" @click="clearData" style="color: var(--danger); cursor: pointer;">
                     <span><i class="fas fa-trash-alt" style="margin-right: 8px;"></i> 清空所有数据</span>
                 </div>
-                <button class="btn btn-secondary" style="width: 100%; margin-top: 16px;" @click="closeModal('settings')">关闭</button>
+                <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" @click="closeModal('settings')">
+                    <i class="fas fa-check"></i> 关闭
+                </button>
             </div>
         </div>
 
-        <!-- 7. 手动调庄模态框 -->
-        <div class="modal-overlay" :class="{ show: modals.dealerSet }">
-            <div class="modal-card">
+        <!-- 6. 手动调庄模态框 -->
+        <div class="modal-overlay" :class="{ show: modals.dealerSet }" @click="closeModal('dealerSet')">
+            <div class="modal-card" @click.stop>
                 <div class="modal-title">指定庄家</div>
                 <!-- Vue 3 fix: v-if has higher priority than v-for, so we cannot use seat in v-if on the same element -->
                 <template v-for="(s, i) in seats" :key="i">
@@ -590,6 +813,27 @@
                     </div>
                 </template>
                 <button class="btn btn-secondary" style="width: 100%; margin-top: 16px;" @click="closeModal('dealerSet')">取消</button>
+            </div>
+        </div>
+
+        <!-- 7. 快速结算模态框 -->
+        <div class="quick-settle-overlay" :class="{ show: quickSettle.show }" @click="cancelQuickSettle"></div>
+        <div class="quick-settle-modal" :class="{ show: quickSettle.show }">
+            <div class="quick-settle-title">
+                {{ quickSettle.from }} <i class="fas fa-arrow-right" style="color: var(--primary); margin: 0 8px;"></i> {{ quickSettle.to }}
+            </div>
+            <input 
+                type="number" 
+                inputmode="numeric"
+                v-model="quickSettle.amount" 
+                class="quick-settle-amount" 
+                placeholder="0"
+                ref="quickAmountInput"
+                @keyup.enter="confirmQuickSettle"
+                @keyup.esc="cancelQuickSettle">
+            <div class="quick-settle-actions">
+                <button class="btn btn-secondary" style="flex: 1;" @click="cancelQuickSettle">取消</button>
+                <button class="btn btn-primary" style="flex: 1;" @click="confirmQuickSettle">确认</button>
             </div>
         </div>
 
@@ -641,6 +885,7 @@
                 const seats = ref([null, null, null, null]); // names
                 const currentRound = ref(1);
                 const dealerIndex = ref(0);
+                const dealerStreak = ref(0); // 当前庄家的连庄次数
                 const history = ref([]);
                 const lastDiff = ref({}); // { name: diff } for animation
                 
@@ -665,19 +910,71 @@
                 const selectingFrom = ref(true);
                 const amountInput = ref(null);
 
+                // Drag State (for both desktop and mobile)
+                const dragState = ref({
+                    dragging: false,
+                    fromIndex: null,
+                    overIndex: null,
+                    touchStartX: 0,
+                    touchStartY: 0,
+                    draggingNextRound: false // Flag for dragging next round button
+                });
+                let touchTimeout = null;
+                let dragClone = null;
+                let lastAngle = null; // Track last angle to prevent jumps
+                let nextRoundTouchTimeout = null;
+
+                // Quick Settle State
+                const quickSettle = ref({
+                    show: false,
+                    from: null,
+                    to: null,
+                    amount: ''
+                });
+                const quickAmountInput = ref(null);
+
                 // Chart
                 let chartInstance = null;
 
                 // --- Computed ---
                 const activePlayers = computed(() => seats.value.filter(n => n));
                 const availablePlayers = computed(() => players.value.filter(p => !seats.value.includes(p.name)));
+                
+                // Track rotation for smooth counter-clockwise animation
+                // 目标角度映射：座位0=0°, 座位1=-90°, 座位2=-180°, 座位3=-270°
+                // 使用函数来延迟初始化，确保能获取到正确的初始dealerIndex
+                let currentRotation = null;
+                let previousDealerIndex = null;
+                
                 const dialRotation = computed(() => {
-                    // 0(Bottom) -> 0deg
-                    // 1(Right) -> -90deg
-                    // 2(Top) -> 180deg
-                    // 3(Left) -> 90deg
-                    const rots = [0, -90, 180, 90];
-                    return rots[dealerIndex.value];
+                    const targetIndex = dealerIndex.value;
+                    
+                    // 首次初始化：直接设置到正确位置，不需要动画
+                    if (currentRotation === null) {
+                        currentRotation = -targetIndex * 90;
+                        previousDealerIndex = targetIndex;
+                        return currentRotation;
+                    }
+                    
+                    // 计算目标角度（东字应该指向的方向）
+                    // 座位0(底部)=0°, 座位1(右侧)=-90°, 座位2(顶部)=-180°, 座位3(左侧)=-270°
+                    const targetAngle = -targetIndex * 90;
+                    
+                    // 如果庄家变了，计算逆时针路径
+                    if (targetIndex !== previousDealerIndex) {
+                        // 计算从当前角度到目标角度的最短逆时针路径
+                        let diff = targetAngle - currentRotation;
+                        
+                        // 标准化差值到 (-360, 0] 区间（逆时针方向）
+                        while (diff > 0) diff -= 360;
+                        while (diff <= -360) diff += 360;
+                        
+                        // 应用逆时针旋转
+                        currentRotation += diff;
+                        previousDealerIndex = targetIndex;
+                    }
+                    
+                    return currentRotation;
                 });
                 
                 // --- Methods ---
@@ -714,6 +1011,7 @@
                         seats: seats.value,
                         currentRound: currentRound.value,
                         dealerIndex: dealerIndex.value,
+                        dealerStreak: dealerStreak.value,
                         history: history.value
                     };
                     localStorage.setItem('mj_data_v3', JSON.stringify(state));
@@ -727,6 +1025,7 @@
                         seats.value = data.seats || [null, null, null, null];
                         currentRound.value = data.currentRound || 1;
                         dealerIndex.value = data.dealerIndex || 0;
+                        dealerStreak.value = data.dealerStreak || 0;
                         history.value = data.history || [];
                     }
                 };
@@ -738,6 +1037,9 @@
                 };
 
                 const handleSeatClick = (index) => {
+                    // Don't open seat modal if we just finished dragging
+                    if (dragState.value.dragging) return;
+                    
                     activeSeatIndex.value = index;
                     modals.value.seat = true;
                 };
@@ -823,26 +1125,551 @@
                     saveState();
                 };
 
+                // Next Round Button Drag (Desktop)
+                const handleNextRoundDragStart = (event) => {
+                    dragState.value.draggingNextRound = true;
+                    
+                    const img = new Image();
+                    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=';
+                    event.dataTransfer.setDragImage(img, 0, 0);
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', 'nextRound');
+                    
+                    dragClone = createNextRoundClone(event.clientX, event.clientY);
+                    
+                    const onDocumentDrag = (e) => {
+                        if (e.clientX !== 0 || e.clientY !== 0) {
+                            updateDragClone(e.clientX, e.clientY);
+                        }
+                    };
+                    document.addEventListener('drag', onDocumentDrag);
+                    
+                    const cleanup = () => {
+                        document.removeEventListener('drag', onDocumentDrag);
+                        document.removeEventListener('dragend', cleanup);
+                    };
+                    document.addEventListener('dragend', cleanup);
+                };
+
+                const handleNextRoundDragEnd = () => {
+                    const targetIndex = dragState.value.overIndex;
+                    
+                    dragState.value.draggingNextRound = false;
+                    dragState.value.overIndex = null;
+                    removeDragClone();
+                    
+                    if (targetIndex !== null) {
+                        // 判断是否至少有一个玩家没有入座
+                        const hasEmptySeat = seats.value.some(seat => seat === null);
+                        
+                        if (hasEmptySeat) {
+                            // 至少有一个玩家没有入座：只指定庄家位置，不增加局数
+                            dealerIndex.value = targetIndex;
+                            dealerStreak.value = 0;
+                            saveState();
+                        } else {
+                            const seat = seats.value[targetIndex];
+                            if (seat) {
+                                // 判断是否是同一个庄家
+                                if (targetIndex === dealerIndex.value) {
+                                    // 连庄：增加连庄次数
+                                    dealerStreak.value++;
+                                } else {
+                                    // 换庄：重置连庄次数，更换庄家
+                                    dealerIndex.value = targetIndex;
+                                    dealerStreak.value = 0;
+                                }
+                                currentRound.value++;
+                                saveState();
+                            }
+                        }
+                    }
+                };
+
+                // Next Round Button Touch (Mobile)
+                const handleNextRoundTouchStart = (event) => {
+                    const touch = event.touches[0];
+                    dragState.value.touchStartX = touch.clientX;
+                    dragState.value.touchStartY = touch.clientY;
+                    
+                    if (nextRoundTouchTimeout) clearTimeout(nextRoundTouchTimeout);
+                    
+                    nextRoundTouchTimeout = setTimeout(() => {
+                        dragState.value.draggingNextRound = true;
+                        if (!dragClone) {
+                            dragClone = createNextRoundClone(dragState.value.touchStartX, dragState.value.touchStartY);
+                        }
+                    }, 150);
+                };
+
+                const handleNextRoundTouchMove = (event) => {
+                    const touch = event.touches[0];
+                    const dx = Math.abs(touch.clientX - dragState.value.touchStartX);
+                    const dy = Math.abs(touch.clientY - dragState.value.touchStartY);
+                    
+                    if (dx > 10 || dy > 10) {
+                        if (nextRoundTouchTimeout) {
+                            clearTimeout(nextRoundTouchTimeout);
+                            nextRoundTouchTimeout = null;
+                        }
+                        dragState.value.draggingNextRound = true;
+                        
+                        if (!dragClone) {
+                            dragClone = createNextRoundClone(touch.clientX, touch.clientY);
+                        }
+                    }
+                    
+                    if (!dragState.value.draggingNextRound) return;
+                    
+                    // Don't preventDefault here - it may be too late and cause warnings
+                    updateDragClone(touch.clientX, touch.clientY);
+                    
+                    // Find which card is under touch
+                    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const card = element?.closest('.player-card');
+                    
+                    if (card) {
+                        const allCards = document.querySelectorAll('.player-card');
+                        const cardIndex = Array.from(allCards).indexOf(card);
+                        
+                        if (cardIndex !== -1) {
+                            const seat = seats.value[cardIndex];
+                            const hasEmptySeat = seats.value.some(s => s === null);
+                            if (hasEmptySeat || seat) {
+                                dragState.value.overIndex = cardIndex;
+                            } else {
+                                dragState.value.overIndex = null;
+                            }
+                        }
+                    } else {
+                        dragState.value.overIndex = null;
+                    }
+                };
+
+                const handleNextRoundTouchEnd = (event) => {
+                    if (nextRoundTouchTimeout) {
+                        clearTimeout(nextRoundTouchTimeout);
+                        nextRoundTouchTimeout = null;
+                    }
+                    
+                    const wasDragging = dragState.value.draggingNextRound;
+                    const targetIndex = dragState.value.overIndex;
+                    
+                    if (wasDragging && targetIndex !== null) {
+                        // Don't preventDefault here - it may be too late and cause warnings
+                        
+                        // 判断是否至少有一个玩家没有入座
+                        const hasEmptySeat = seats.value.some(seat => seat === null);
+                        
+                        if (hasEmptySeat) {
+                            // 至少有一个玩家没有入座：只指定庄家位置，不增加局数
+                            dealerIndex.value = targetIndex;
+                            dealerStreak.value = 0;
+                            saveState();
+                        } else {
+                            const seat = seats.value[targetIndex];
+                            if (seat) {
+                                // 判断是否是同一个庄家
+                                if (targetIndex === dealerIndex.value) {
+                                    // 连庄：增加连庄次数
+                                    dealerStreak.value++;
+                                } else {
+                                    // 换庄：重置连庄次数，更换庄家
+                                    dealerIndex.value = targetIndex;
+                                    dealerStreak.value = 0;
+                                }
+                                currentRound.value++;
+                                saveState();
+                            }
+                        }
+                    }
+                    
+                    dragState.value.draggingNextRound = false;
+                    dragState.value.overIndex = null;
+                    removeDragClone();
+                };
+
+                // Drag Clone Helpers
+                const normalizeAngle = (angle) => {
+                    // Normalize angle to 0-360 range
+                    while (angle < 0) angle += 360;
+                    while (angle >= 360) angle -= 360;
+                    return angle;
+                };
+                
+                const calculateRotationAngle = (x, y) => {
+                    // Calculate screen center
+                    const centerX = window.innerWidth / 2;
+                    const centerY = window.innerHeight / 2;
+                    
+                    // Calculate angle from center to cursor position
+                    // atan2 returns angle in radians, convert to degrees
+                    // Add 90 to adjust because our cards point "up" at 0 degrees
+                    // Add 180 to make it point outward (away from center)
+                    let angle = Math.atan2(y - centerY, x - centerX) * (180 / Math.PI) + 90 + 180;
+                    
+                    // Smooth angle transition to prevent jumps
+                    if (lastAngle !== null) {
+                        // Normalize the difference to find shortest path
+                        let diff = angle - lastAngle;
+                        
+                        // Wrap difference to [-180, 180] range
+                        while (diff > 180) diff -= 360;
+                        while (diff < -180) diff += 360;
+                        
+                        // Apply the shortest path difference
+                        angle = lastAngle + diff;
+                    }
+                    
+                    lastAngle = angle;
+                    return angle;
+                };
+                
+                const createDragClone = (seatName, x, y, positionIndex) => {
+                    // Reset angle tracking for new drag
+                    lastAngle = null;
+                    
+                    const clone = document.createElement('div');
+                    clone.className = 'drag-clone';
+                    clone.innerHTML = `
+                        <div class="player-name">${seatName}</div>
+                        <div class="player-score">${getPlayerScore(seatName)}</div>
+                    `;
+                    clone.style.left = `${x - 80}px`; // 80 = width/2
+                    clone.style.top = `${y - 40}px`; // Approximate center
+                    
+                    // Calculate rotation based on position relative to screen center
+                    const angle = calculateRotationAngle(x, y);
+                    clone.style.transform = `rotate(${angle}deg)`;
+                    
+                    document.body.appendChild(clone);
+                    
+                    // Trigger fade in
+                    requestAnimationFrame(() => {
+                        clone.classList.add('show');
+                    });
+                    
+                    return clone;
+                };
+
+                const updateDragClone = (x, y) => {
+                    if (dragClone) {
+                        dragClone.style.left = `${x - 80}px`;
+                        dragClone.style.top = `${y - 40}px`;
+                        
+                        // Update rotation based on new position relative to screen center
+                        const angle = calculateRotationAngle(x, y);
+                        dragClone.style.transform = `rotate(${angle}deg)`;
+                    }
+                };
+
+                const removeDragClone = () => {
+                    if (dragClone) {
+                        dragClone.classList.remove('show');
+                        setTimeout(() => {
+                            if (dragClone && dragClone.parentNode) {
+                                dragClone.parentNode.removeChild(dragClone);
+                            }
+                            dragClone = null;
+                            lastAngle = null; // Reset angle tracking
+                        }, 200); // Match transition duration
+                    }
+                };
+
+                const createNextRoundClone = (x, y) => {
+                    lastAngle = null;
+                    
+                    const clone = document.createElement('div');
+                    clone.className = 'drag-clone next-round-clone';
+                    clone.innerHTML = `
+                        <div class="clone-text">
+                            <i class="fas fa-crown" style="font-size: 24px; margin-bottom: 8px;"></i>
+                            <div>指定庄家</div>
+                        </div>
+                    `;
+                    clone.style.left = `${x - 80}px`;
+                    clone.style.top = `${y - 40}px`;
+                    
+                    const angle = calculateRotationAngle(x, y);
+                    clone.style.transform = `rotate(${angle}deg)`;
+                    
+                    document.body.appendChild(clone);
+                    
+                    requestAnimationFrame(() => {
+                        clone.classList.add('show');
+                    });
+                    
+                    return clone;
+                };
+
+                // Drag and Drop (Desktop)
+                const handleDragStart = (index, event) => {
+                    const seat = seats.value[index];
+                    if (!seat) return;
+                    
+                    dragState.value.dragging = true;
+                    dragState.value.fromIndex = index;
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', index.toString());
+                    
+                    // Hide default drag image
+                    const img = new Image();
+                    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=';
+                    event.dataTransfer.setDragImage(img, 0, 0);
+                    
+                    // Create clone at cursor position with proper rotation
+                    dragClone = createDragClone(seat, event.clientX, event.clientY, index);
+                    
+                    // Add document-level drag listener to track cursor position everywhere
+                    const onDocumentDrag = (e) => {
+                        if (e.clientX !== 0 || e.clientY !== 0) {
+                            updateDragClone(e.clientX, e.clientY);
+                        }
+                    };
+                    document.addEventListener('drag', onDocumentDrag);
+                    
+                    // Clean up on drag end
+                    const cleanup = () => {
+                        document.removeEventListener('drag', onDocumentDrag);
+                        document.removeEventListener('dragend', cleanup);
+                    };
+                    document.addEventListener('dragend', cleanup);
+                };
+
+                const handleDragEnd = () => {
+                    dragState.value.dragging = false;
+                    dragState.value.fromIndex = null;
+                    dragState.value.overIndex = null;
+                    removeDragClone();
+                };
+
+                const handleDragOver = (index, event) => {
+                    event.preventDefault();
+                    
+                    // Update clone position
+                    updateDragClone(event.clientX, event.clientY);
+                    
+                    const seat = seats.value[index];
+                    
+                    // Accept both player card drag and next round button drag
+                    if (dragState.value.draggingNextRound) {
+                        // For next round drag, check if at least one empty seat (allow any position) or if seat is occupied
+                        const hasEmptySeat = seats.value.some(s => s === null);
+                        if (hasEmptySeat || seat) {
+                            dragState.value.overIndex = index;
+                            event.dataTransfer.dropEffect = 'move';
+                        } else {
+                            dragState.value.overIndex = null;
+                        }
+                    } else {
+                        // For player card drag, can't drag to self or empty seat
+                        if (!seat || index === dragState.value.fromIndex) {
+                            dragState.value.overIndex = null;
+                            return;
+                        }
+                        dragState.value.overIndex = index;
+                        event.dataTransfer.dropEffect = 'move';
+                    }
+                };
+
+                const handleDragLeave = () => {
+                    dragState.value.overIndex = null;
+                };
+
+                const handleDrop = (toIndex, event) => {
+                    event.preventDefault();
+                    const fromIndex = parseInt(event.dataTransfer.getData('text/plain'));
+                    
+                    const fromSeat = seats.value[fromIndex];
+                    const toSeat = seats.value[toIndex];
+                    
+                    if (!fromSeat || !toSeat || fromIndex === toIndex) {
+                        handleDragEnd();
+                        return;
+                    }
+
+                    // Open quick settle modal
+                    openQuickSettle(fromSeat, toSeat);
+                    handleDragEnd();
+                };
+
+                // Touch Events (Mobile)
+                const handleTouchStart = (index, event) => {
+                    const seat = seats.value[index];
+                    if (!seat) return;
+                    
+                    const touch = event.touches[0];
+                    dragState.value.touchStartX = touch.clientX;
+                    dragState.value.touchStartY = touch.clientY;
+                    dragState.value.fromIndex = index;
+                    
+                    // Clear any existing timeout
+                    if (touchTimeout) clearTimeout(touchTimeout);
+                    
+                    // Delay to distinguish between tap and drag
+                    touchTimeout = setTimeout(() => {
+                        // Check if finger hasn't moved much (still holding)
+                        dragState.value.dragging = true;
+                        // Create clone for touch drag with proper rotation
+                        if (!dragClone) {
+                            dragClone = createDragClone(seat, dragState.value.touchStartX, dragState.value.touchStartY, index);
+                        }
+                    }, 150);
+                };
+
+                const handleTouchMove = (event) => {
+                    const touch = event.touches[0];
+                    const dx = Math.abs(touch.clientX - dragState.value.touchStartX);
+                    const dy = Math.abs(touch.clientY - dragState.value.touchStartY);
+                    
+                    // If moved more than 10px, consider it a drag
+                    if (dx > 10 || dy > 10) {
+                        if (touchTimeout) {
+                            clearTimeout(touchTimeout);
+                            touchTimeout = null;
+                        }
+                        dragState.value.dragging = true;
+                        
+                        // Create clone if not already created with proper rotation
+                        if (!dragClone) {
+                            const seat = seats.value[dragState.value.fromIndex];
+                            if (seat) {
+                                dragClone = createDragClone(seat, touch.clientX, touch.clientY, dragState.value.fromIndex);
+                            }
+                        }
+                    }
+                    
+                    if (!dragState.value.dragging) return;
+                    
+                    event.preventDefault();
+                    
+                    // Update clone position
+                    updateDragClone(touch.clientX, touch.clientY);
+                    
+                    // Find which card is under the touch point
+                    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const card = element?.closest('.player-card');
+                    
+                    if (card) {
+                        // Find the index of this card among all player cards
+                        const allCards = document.querySelectorAll('.player-card');
+                        const cardIndex = Array.from(allCards).indexOf(card);
+                        
+                        if (cardIndex !== -1 && cardIndex !== dragState.value.fromIndex) {
+                            const seat = seats.value[cardIndex];
+                            if (seat) {
+                                dragState.value.overIndex = cardIndex;
+                            } else {
+                                dragState.value.overIndex = null;
+                            }
+                        }
+                    } else {
+                        dragState.value.overIndex = null;
+                    }
+                };
+
+                const handleTouchEnd = (event) => {
+                    // Clear timeout if it hasn't fired yet
+                    if (touchTimeout) {
+                        clearTimeout(touchTimeout);
+                        touchTimeout = null;
+                    }
+                    
+                    const wasDragging = dragState.value.dragging;
+                    const fromIndex = dragState.value.fromIndex;
+                    const toIndex = dragState.value.overIndex;
+                    
+                    // If was actually dragging and dropped on a valid target
+                    if (wasDragging && toIndex !== null && fromIndex !== toIndex) {
+                        event.preventDefault(); // Prevent click event
+                        
+                        const fromSeat = seats.value[fromIndex];
+                        const toSeat = seats.value[toIndex];
+                        
+                        // Reset drag state (will remove clone)
+                        handleDragEnd();
+                        
+                        if (fromSeat && toSeat) {
+                            openQuickSettle(fromSeat, toSeat);
+                        }
+                    } else {
+                        // Reset drag state
+                        handleDragEnd();
+                    }
+                };
+
+                // Quick Settle Modal
+                const openQuickSettle = (from, to) => {
+                    quickSettle.value.from = from;
+                    quickSettle.value.to = to;
+                    quickSettle.value.amount = '';
+                    quickSettle.value.show = true;
+                    
+                    nextTick(() => {
+                        quickAmountInput.value?.focus();
+                        quickAmountInput.value?.select();
+                    });
+                };
+
+                const confirmQuickSettle = () => {
+                    const amount = parseInt(quickSettle.value.amount);
+                    if (!amount || amount <= 0) return;
+                    
+                    // Update Scores
+                    const fromP = players.value.find(p => p.name === quickSettle.value.from);
+                    const toP = players.value.find(p => p.name === quickSettle.value.to);
+                    fromP.score -= amount;
+                    toP.score += amount;
+
+                    // Record History
+                    history.value.unshift({
+                        time: Date.now(),
+                        round: currentRound.value,
+                        dealerIndex: dealerIndex.value,
+                        transactions: [{ from: quickSettle.value.from, to: quickSettle.value.to, amount }]
+                    });
+
+                    // Show Diff Animation
+                    lastDiff.value = {};
+                    lastDiff.value[quickSettle.value.from] = -amount;
+                    lastDiff.value[quickSettle.value.to] = amount;
+                    setTimeout(() => lastDiff.value = {}, 3000);
+
+                    saveState();
+                    quickSettle.value.show = false;
+                };
+
+                const cancelQuickSettle = () => {
+                    quickSettle.value.show = false;
+                };
+
                 // Round Management
-                const nextRoundCheck = () => {
+                const handleNextRoundClick = () => {
+                    // Don't trigger click if we just finished dragging
+                    if (dragState.value.draggingNextRound) return;
+                    
                     // Check if settled this round
                     const settled = history.value.some(h => h.round === currentRound.value);
                     if (!settled && !confirm('本局尚未结算，确定进入下一局？')) return;
-                    modals.value.nextRound = true;
+                    
+                    // 直接换庄到下一家
+                    dealerIndex.value = (dealerIndex.value + 1) % 4;
+                    dealerStreak.value = 0;
+                    currentRound.value++;
+                    saveState();
+                };
+                
+                const nextRoundCheck = () => {
+                    // 已废弃，保留兼容
                 };
 
                 const nextRound = (changeDealer) => {
-                    if (changeDealer) {
-                        dealerIndex.value = (dealerIndex.value + 1) % 4;
-                    }
-                    currentRound.value++;
-                    saveState();
-                    closeModal('nextRound');
+                    // 已废弃，保留兼容
                 };
 
                 // Settings & Utils
                 const closeModal = (name) => modals.value[name] = false;
-                const formatTime = (ts) => new Date(ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const formatTime = (ts) => new Date(ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second: '2-digit'});
                 
                 const clearData = () => {
                     if (confirm('确定清空所有数据？')) {
@@ -931,11 +1758,35 @@
                             responsive: true,
                             maintainAspectRatio: false,
                             plugins: {
-                                legend: { labels: { color: isDark.value ? '#fff' : '#333' } }
+                                legend: { 
+                                    labels: { 
+                                        color: isDark.value ? '#fff' : '#333',
+                                        usePointStyle: true,
+                                        pointStyle: 'rect',
+                                        padding: 15,
+                                        font: {
+                                            size: 13
+                                        }
+                                    },
+                                    // 当只有4个或更少玩家时，使用2列布局
+                                    align: 'center',
+                                    maxWidth: allNames.length <= 4 ? 500 : 800
+                                }
                             },
                             scales: {
                                 x: { ticks: { color: isDark.value ? '#aaa' : '#666' }, grid: { color: isDark.value ? '#333' : '#ddd' } },
-                                y: { ticks: { color: isDark.value ? '#aaa' : '#666' }, grid: { color: isDark.value ? '#333' : '#ddd' } }
+                                y: { 
+                                    ticks: { 
+                                        color: isDark.value ? '#aaa' : '#666',
+                                        // 只显示整数，不显示小数
+                                        callback: function(value) {
+                                            if (Math.floor(value) === value) {
+                                                return value;
+                                            }
+                                        }
+                                    }, 
+                                    grid: { color: isDark.value ? '#333' : '#ddd' } 
+                                }
                             }
                         }
                     });
@@ -955,14 +1806,23 @@
 
                 return {
                     isDark, toggleTheme,
-                    seats, players, currentRound, dealerIndex, history, lastDiff,
+                    seats, players, currentRound, dealerIndex, dealerStreak, history, lastDiff,
                     modals, closeModal,
                     activePlayers, availablePlayers, dialRotation,
                     getPlayerScore, handleSeatClick, addNewPlayer, sitDown, newPlayerName,
                     openSettleModal, settleFrom, settleTo, settleAmount, selectingFrom, selectSettlePlayer, confirmSettle, amountInput,
-                    undo, nextRoundCheck, nextRound,
+                    undo, handleNextRoundClick, nextRoundCheck, nextRound,
                     formatTime, clearData,
-                    showStats, showHistory: () => modals.value.history = true, showSettings: () => modals.value.settings = true, showRoundModal: () => {}
+                    showStats, showHistory: () => modals.value.history = true, showSettings: () => modals.value.settings = true, showRoundModal: () => {},
+                    // Drag and Drop (Player Cards)
+                    dragState,
+                    handleDragStart, handleDragEnd, handleDragOver, handleDragLeave, handleDrop,
+                    handleTouchStart, handleTouchMove, handleTouchEnd,
+                    // Drag and Drop (Next Round Button)
+                    handleNextRoundDragStart, handleNextRoundDragEnd,
+                    handleNextRoundTouchStart, handleNextRoundTouchMove, handleNextRoundTouchEnd,
+                    // Quick Settle
+                    quickSettle, quickAmountInput, confirmQuickSettle, cancelQuickSettle
                 };
             }
         }).mount('#app');
