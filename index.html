@@ -189,11 +189,11 @@
                 </div>
 
                 <!-- 玩家选择列表 -->
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px;">
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px;">
                     <div v-for="p in activePlayers" :key="p" 
                          class="list-item" 
                          :class="{ active: (selectingFrom ? settleFrom : settleTo) === p }"
-                         style="justify-content: center; margin: 0;"
+                         style="justify-content: center; margin: 0; padding: 8px 4px; font-size: 13px;"
                          @click="selectSettlePlayer(p)">
                         {{ p }}
                     </div>
@@ -351,6 +351,9 @@
                 <div class="modal-title">操作说明</div>
                 <div class="help-section">
                     <div style="font-size: 14px; line-height: 1.6; opacity: 0.8;">
+                        <div style="margin-bottom: 8px;">
+                            <strong>📊 局数与连庄：</strong>中间风盘数字表示当前第几局；庄家右上角显示皇冠表示首次当庄，显示数字表示连庄次数（如显示1表示连庄1次，即第2次当庄）
+                        </div>
                         <div style="margin-bottom: 8px;">
                             <strong>💰 结算分数：</strong>拖动玩家A到玩家B，输入分数后确认（A给B分数）
                         </div>

@@ -121,7 +121,7 @@ createApp({
         const canZoomIn = ref(true);
         const canZoomOut = ref(true);
         const scaleStep = 0.10; // 每次调整百分之多少
-        const absoluteMaxScale = 2.5; // 绝对最大缩放限制
+        const absoluteMaxScale = 3.5; // 绝对最大缩放限制（原2.5提升40%）
 
         const adjustScale = (direction) => {
             // Calculate potential new scale
@@ -1442,14 +1442,15 @@ createApp({
                                 color: isDark.value ? '#fff' : '#333',
                                 usePointStyle: true,
                                 pointStyle: 'rect',
-                                padding: 15,
+                                padding: 12,
                                 font: {
                                     size: 13
-                                }
+                                },
+                                boxWidth: 12
                             },
-                            // 当只有4个或更少玩家时，使用2列布局
+                            // 对于4个玩家，设置maxWidth为240-260之间的值应该能实现2x2布局
                             align: 'center',
-                            maxWidth: allNames.length <= 4 ? 500 : 800
+                            maxWidth: allNames.length === 4 ? 250 : (allNames.length <= 3 ? 500 : 800)
                         }
                     },
                     scales: {

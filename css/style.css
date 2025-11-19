@@ -196,7 +196,7 @@ body.dark .center-dial {
 /* 玩家卡片 */
 .player-card {
     position: absolute;
-    width: 160px;
+    width: 200px; /* 从180px进一步增加到200px以容纳更长的数字 */
     padding: 16px;
     background: var(--card-light);
     backdrop-filter: blur(20px); /* 增强模糊 */
@@ -209,11 +209,32 @@ body.dark .center-dial {
     cursor: grab;
     border: 1px solid rgba(255, 255, 255, 0.4); /* 玻璃边缘高光 */
     touch-action: none; /* 防止移动端默认行为 */
+    overflow: visible; /* 允许内容溢出可见 */
 }
 body.dark .player-card { 
     background: var(--card-dark); 
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
     border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 庄家卡片金色样式 */
+.player-card.dealer {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.25), rgba(245, 158, 11, 0.15));
+    border: 2px solid #f59e0b;
+    box-shadow: 0 8px 32px 0 rgba(245, 158, 11, 0.3), 0 0 20px rgba(251, 191, 36, 0.2);
+}
+body.dark .player-card.dealer {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.1));
+    border: 2px solid #fbbf24;
+    box-shadow: 0 8px 32px 0 rgba(251, 191, 36, 0.4), 0 0 25px rgba(251, 191, 36, 0.3);
+}
+
+/* 庄家分数金色 */
+.player-card.dealer .player-score {
+    color: #d97706;
+}
+body.dark .player-card.dealer .player-score {
+    color: #fbbf24;
 }
 
 /* 拖拽状态 */
@@ -248,7 +269,7 @@ body.dark .player-card.empty-seat:hover {
 /* 拖拽分身 */
 .drag-clone {
     position: fixed;
-    width: 160px;
+    width: 200px; /* 保持与玩家卡片一致 */
     padding: 16px;
     background: var(--card-light);
     backdrop-filter: blur(12px);
@@ -353,20 +374,27 @@ body.dark .drag-clone.next-round-clone {
     bottom: calc(20px + var(--offset-y, 0px)); 
 }
 .pos-1 { 
-    right: calc(-20px + var(--offset-x, 0px)); 
+    right: calc(-12px + var(--offset-x, 0px)); /* 从-5px改为-12px，往外推7px */
     top: 50%; 
 }
 .pos-2 { 
     top: calc(20px + var(--offset-y, 0px)); 
 }
 .pos-3 { 
-    left: calc(-20px + var(--offset-x, 0px)); 
+    left: calc(-12px + var(--offset-x, 0px)); /* 从-5px改为-12px，往外推7px */
     top: 50%; 
 }
 
 
 .player-name { font-size: 16px; font-weight: 600; margin-bottom: 4px; opacity: 0.8; }
-.player-score { font-size: 28px; font-weight: 800; color: var(--primary); transition: color 0.3s; }
+.player-score { 
+    font-size: 40px; 
+    font-weight: 800; 
+    color: var(--primary); 
+    transition: color 0.3s;
+    white-space: nowrap; /* 强制单行显示，不换行 */
+    overflow: visible; /* 允许内容溢出可见 */
+}
 /* 分数变化反馈 */
 .score-changed-pos { color: var(--success) !important; }
 .score-changed-neg { color: var(--danger) !important; }
@@ -447,13 +475,15 @@ body.dark .btn-secondary { background: var(--card-dark); color: var(--text-dark)
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
     transform: translateY(20px);
     transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    max-height: 85vh;
+    max-height: 90vh; /* 从85vh增加到90vh，利用更多屏幕空间 */
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
 }
 body.dark .modal-card { background: #1f2937; border: 1px solid rgba(255,255,255,0.1); }
 .modal-overlay.show .modal-card { transform: translateY(0); }
 
-.modal-title { font-size: 20px; font-weight: 800; margin-bottom: 20px; text-align: center; }
+.modal-title { font-size: 18px; font-weight: 800; margin-bottom: 16px; text-align: center; } /* 减小标题尺寸和间距 */
 
 /* 输入框 */
 .input-field {
@@ -619,18 +649,19 @@ body.dark .center-dial.dice-mode {
 .settle-grid {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 12px; /* 从20px减少到12px */
 }
 .player-select-box {
-    padding: 10px;
-    border-radius: 12px;
+    padding: 8px; /* 从10px减少到8px */
+    border-radius: 10px;
     background: #f3f4f6;
     text-align: center;
     cursor: pointer;
     border: 2px solid transparent;
     transition: all 0.3s;
+    font-size: 14px; /* 添加明确的字体大小 */
 }
 body.dark .player-select-box { background: #374151; }
 .player-select-box.selected { border-color: var(--primary); background: rgba(99, 102, 241, 0.1); }
@@ -739,19 +770,19 @@ body.dark .help-section {
 /* Numeric Keypad & Settle Modal Styles */
 .calc-display {
     background: var(--bg-light);
-    padding: 16px;
-    border-radius: 12px;
-    margin-bottom: 20px;
+    padding: 12px; /* 从16px减少到12px */
+    border-radius: 10px;
+    margin-bottom: 12px; /* 从20px减少到12px */
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    font-size: 32px;
+    font-size: 28px; /* 从32px减少到28px */
     font-weight: 700;
     color: var(--text-light);
     border: 2px solid transparent;
     transition: all 0.3s;
     position: relative;
-    min-height: 72px;
+    min-height: 56px; /* 从72px减少到56px */
 }
 body.dark .calc-display { background: rgba(0,0,0,0.2); color: var(--text-dark); }
 .calc-display.has-value { border-color: var(--primary); background: rgba(99, 102, 241, 0.1); }
@@ -781,15 +812,16 @@ body.dark .clear-btn { color: var(--text-dark); }
 .numeric-keypad {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
+    gap: 8px; /* 从12px减少到8px */
+    flex-shrink: 0; /* 防止键盘被压缩 */
 }
 
 .key-btn {
     background: var(--bg-light);
     border: none;
-    border-radius: 12px;
-    padding: 15px 0;
-    font-size: 24px;
+    border-radius: 10px;
+    padding: 12px 0; /* 从15px减少到12px */
+    font-size: 20px; /* 从24px减少到20px */
     font-weight: 600;
     color: var(--text-light);
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
@@ -810,9 +842,9 @@ body.dark .key-btn:active { background: rgba(255,255,255,0.2); }
     grid-column: 1 / -1;
     background: var(--primary);
     color: white;
-    font-size: 20px;
-    margin-top: 8px;
-    padding: 18px 0;
+    font-size: 18px; /* 从20px减少到18px */
+    margin-top: 4px; /* 从8px减少到4px */
+    padding: 14px 0; /* 从18px减少到14px */
 }
 body.dark .key-confirm { background: var(--primary); color: white; }
 .key-confirm:active { background: var(--primary-dark); }
@@ -827,8 +859,9 @@ body.dark .key-confirm { background: var(--primary); color: white; }
     .settle-modal-overlay .modal-card {
         width: 100%;
         max-width: none;
-        border-radius: 24px 24px 0 0;
-        padding: 24px 20px 30px 20px; /* More bottom padding */
+        max-height: 95vh; /* 增加到95vh以利用更多屏幕空间 */
+        border-radius: 20px 20px 0 0;
+        padding: 16px 16px 20px 16px; /* 减小内边距 */
         margin: 0;
         animation: slideUp 0.3s ease-out;
     }
@@ -839,10 +872,13 @@ body.dark .key-confirm { background: var(--primary); color: white; }
     }
 
     /* Adjust keypad button size for touch */
-    .key-btn { padding: 18px 0; font-size: 26px; }
+    .key-btn { padding: 14px 0; font-size: 20px; } /* 进一步减小以适配高度 */
     
     /* Compact the top part to save space */
-    .settle-modal-overlay .modal-title { margin-bottom: 15px; }
-    .settle-modal-overlay .settle-grid { margin-bottom: 15px; }
-    .settle-modal-overlay .list-item { padding: 8px; font-size: 14px; }
+    .settle-modal-overlay .modal-title { margin-bottom: 10px; font-size: 16px; } /* 减小标题 */
+    .settle-modal-overlay .settle-grid { margin-bottom: 10px; gap: 6px; }
+    .settle-modal-overlay .player-select-box { padding: 6px; font-size: 13px; }
+    .settle-modal-overlay .calc-display { padding: 10px; min-height: 50px; font-size: 24px; margin-bottom: 10px; }
+    .settle-modal-overlay .numeric-keypad { gap: 6px; }
+    .settle-modal-overlay .key-confirm { padding: 12px 0; margin-top: 2px; }
 }
