@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>通用麻将计分器</title>
     <style>
         * {
@@ -15,18 +15,26 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            min-height: -webkit-fill-available;
             height: 100vh;
+            height: 100dvh;
+            height: -webkit-fill-available;
             padding: 0;
             margin: 0;
             overflow: hidden;
+            position: fixed;
+            width: 100%;
         }
 
         .container {
             width: 100%;
             height: 100vh;
+            height: 100dvh;
+            height: -webkit-fill-available;
             display: flex;
             flex-direction: column;
             position: relative;
+            overflow: hidden;
         }
 
         .header {
@@ -41,7 +49,7 @@
             position: relative;
             flex: 1;
             width: 100%;
-            height: 100%;
+            min-height: 0;
             background: rgba(255, 255, 255, 0.95);
             margin: 0;
             padding: 10px;
@@ -65,9 +73,15 @@
         
         .seat.left,
         .seat.right {
-            width: 20vw;
-            max-width: 150px;
-            min-width: 100px;
+            width: 18vw;
+            max-width: 140px;
+            min-width: 110px;
+            height: 70vh;
+            max-height: 70vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
 
         .seat.bottom:hover {
@@ -143,12 +157,16 @@
             left: 10px;
             top: 50%;
             transform: translateY(-50%) rotate(90deg);
+            height: 70vh;
+            max-height: 70vh;
         }
 
         .seat.right {
             right: 10px;
             top: 50%;
             transform: translateY(-50%) rotate(-90deg);
+            height: 70vh;
+            max-height: 70vh;
         }
 
         .seat-name {
@@ -232,8 +250,12 @@
             gap: 8px;
             justify-content: center;
             padding: 8px;
+            padding-bottom: max(8px, env(safe-area-inset-bottom));
             flex-shrink: 0;
             flex-wrap: wrap;
+            background: rgba(255, 255, 255, 0.95);
+            position: relative;
+            z-index: 100;
         }
 
         .btn {
@@ -535,8 +557,10 @@
             .seat.left,
             .seat.right {
                 width: 18vw;
-                max-width: 120px;
-                min-width: 80px;
+                max-width: 130px;
+                min-width: 100px;
+                height: 70vh;
+                max-height: 70vh;
             }
             
             .button-group {
@@ -567,7 +591,9 @@
             .seat.right {
                 width: 18vw;
                 max-width: 150px;
-                min-width: 100px;
+                min-width: 120px;
+                height: 70vh;
+                max-height: 70vh;
             }
             
             .seat-name {
@@ -657,7 +683,9 @@
             .seat.right {
                 width: 20vw;
                 max-width: 180px;
-                min-width: 120px;
+                min-width: 140px;
+                height: 70vh;
+                max-height: 70vh;
             }
             
             .seat-name {
