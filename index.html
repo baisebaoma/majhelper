@@ -291,6 +291,96 @@
         .pos-2 { top: 20px; } 
         .pos-3 { left: -20px; top: 50%; } /* 左侧稍微靠外一点 */
 
+        /* 平板适配 (iPad 等大屏设备) */
+        @media screen and (min-width: 768px) {
+            /* 1. 玩家卡片放大 - 自适应宽度 */
+            .player-card {
+                /* 默认宽度 */
+                width: 42vmin;
+                /* 限制最小最大值，防止过小或过大 */
+                min-width: 320px; 
+                max-width: 500px;
+                
+                padding: 4vmin;
+                border-radius: 4vmin;
+                box-shadow: 0 1vmin 2vmin -0.2vmin rgba(0, 0, 0, 0.15);
+            }
+            body.dark .player-card { box-shadow: 0 1vmin 2vmin -0.2vmin rgba(0, 0, 0, 0.4); }
+
+            /* 修正定位 */
+            .pos-0 { bottom: 8vmin; }
+            /* 对于侧边，偏移量需要考虑到旋转后的中心点 */
+            .pos-1 { right: -5vmin; } 
+            .pos-2 { top: 8vmin; }
+            .pos-3 { left: -5vmin; } 
+            
+            /* 字体放大 - 自适应字号 */
+            .player-name { font-size: 4.5vmin; margin-bottom: 1.5vmin; }
+            .player-score { font-size: 12vmin; line-height: 1.1; } /* 数字非常大 */
+            .score-diff { font-size: 2.5vmin; height: 3vmin; }
+            .dealer-badge { width: 7vmin; height: 7vmin; font-size: 3.5vmin; top: -2vmin; right: -2vmin; }
+            
+            /* 2. 中间圆盘放大 */
+            .center-dial {
+                /* 稍微调大一点，避免内容重叠，但比最早的 38vmin 小 */
+                width: 28vmin;
+                height: 28vmin;
+                border-width: 1vmin;
+                box-shadow: 0 2vmin 5vmin -1vmin rgba(0, 0, 0, 0.2);
+            }
+            body.dark .center-dial { box-shadow: 0 2vmin 5vmin -1vmin rgba(0, 0, 0, 0.6); }
+            
+            /* 字体适配圆盘尺寸，防止重叠 */
+            .dial-round { font-size: 10vmin; }
+            .direction { font-size: 4vmin; }
+            .direction.dir-0 { bottom: 2.5vmin; }
+            .direction.dir-1 { right: 2.5vmin; }
+            .direction.dir-2 { top: 2.5vmin; }
+            .direction.dir-3 { left: 2.5vmin; }
+
+            /* 3. 骰子放大 */
+            .dice-container {
+                /* 配合 28vmin 的圆盘调整，需要显著放大 */
+                transform: translate(-50%, -50%) scale(2) !important;
+            }
+            .center-dial.dice-mode {
+                /* 28vmin * 1.3 ≈ 36vmin，保持展开后大小适中 */
+                transform: scale(1.3); 
+            }
+            
+            /* 4. 按钮和底部栏 */
+            .action-bar { padding: 5vmin; gap: 3vmin; }
+            .btn { padding: 2.5vmin 5vmin; font-size: 3vmin; border-radius: 2.5vmin; }
+            .btn i { font-size: 3.5vmin; }
+            
+            /* 5. 顶部栏 */
+            .header { padding: 3vmin 4vmin; }
+            .round-badge { padding: 1.5vmin 3.5vmin; font-size: 3vmin; border-radius: 4vmin; }
+            .icon-btn { font-size: 4vmin; padding: 1.5vmin; }
+            
+            /* 6. 拖拽分身 */
+            .drag-clone {
+                width: 42vmin;
+                padding: 4vmin;
+                border-radius: 4vmin;
+            }
+            .drag-clone .player-name { font-size: 4.5vmin; margin-bottom: 1.5vmin; }
+            .drag-clone .player-score { font-size: 12vmin; line-height: 1.1; }
+            
+            /* 7. 模态框放大 */
+            .modal-card {
+                max-width: 600px;
+                padding: 5vmin;
+                border-radius: 4vmin;
+            }
+            .modal-title { font-size: 4vmin; margin-bottom: 4vmin; }
+            .list-item { padding: 2.5vmin; font-size: 3vmin; border-radius: 2vmin; margin-bottom: 2vmin; }
+            .input-field { padding: 2.5vmin; font-size: 3vmin; border-radius: 2vmin; margin-bottom: 3vmin; }
+            .quick-settle-modal { padding: 5vmin; min-width: 400px; }
+            .quick-settle-title { font-size: 3.5vmin; margin-bottom: 4vmin; }
+            .quick-settle-amount { font-size: 6vmin; padding: 3vmin; border-radius: 3vmin; margin-bottom: 4vmin; border-width: 0.5vmin; }
+        }
+
         /* 强制竖屏逻辑 */
         @media screen and (orientation: landscape) {
             body {
@@ -441,7 +531,7 @@
         
         /* 骰子相关样式 */
         .center-dial.dice-mode {
-            transform: scale(2.5) !important;
+            transform: scale(2.5);
             z-index: 101;
             border-color: rgba(255,255,255,0.2);
             background: rgba(40, 40, 60, 0.95);
@@ -709,7 +799,7 @@
                      'is-rolling': diceMode && isRolling,
                      'roll-finished': diceMode && !isRolling && hasRolled
                  }"
-                 :style="{ transform: diceMode ? 'scale(2.5)' : `rotate(${dialRotation}deg)` }"
+                 :style="{ transform: diceMode ? '' : `rotate(${dialRotation}deg)` }"
                  @click="handleDialClick">
                 <!-- 只有当该方向对应的是东(dealerIndex)时才高亮 -->
                 <div class="direction dir-0 is-east">東</div>
@@ -1579,6 +1669,18 @@
                 };
 
                 // Drag Clone Helpers
+                const getCardOffset = () => {
+                    if (window.innerWidth >= 768) {
+                        // 根据 vmin 动态计算偏移
+                        // 42vmin / 2 = 21vmin
+                        const vmin = Math.min(window.innerWidth, window.innerHeight);
+                        const halfWidth = (vmin * 0.42) / 2;
+                        const halfHeight = (vmin * 0.3) / 2; // 估算高度
+                        return { x: halfWidth, y: halfHeight };
+                    }
+                    return { x: 80, y: 40 };
+                };
+
                 const normalizeAngle = (angle) => {
                     // Normalize angle to 0-360 range
                     while (angle < 0) angle += 360;
@@ -1624,8 +1726,9 @@
                         <div class="player-name">${seatName}</div>
                         <div class="player-score">${getPlayerScore(seatName)}</div>
                     `;
-                    clone.style.left = `${x - 80}px`; // 80 = width/2
-                    clone.style.top = `${y - 40}px`; // Approximate center
+                    const offset = getCardOffset();
+                    clone.style.left = `${x - offset.x}px`;
+                    clone.style.top = `${y - offset.y}px`;
                     
                     // Calculate rotation based on position relative to screen center
                     const angle = calculateRotationAngle(x, y);
@@ -1643,8 +1746,9 @@
 
                 const updateDragClone = (x, y) => {
                     if (dragClone) {
-                        dragClone.style.left = `${x - 80}px`;
-                        dragClone.style.top = `${y - 40}px`;
+                        const offset = getCardOffset();
+                        dragClone.style.left = `${x - offset.x}px`;
+                        dragClone.style.top = `${y - offset.y}px`;
                         
                         // Update rotation based on new position relative to screen center
                         const angle = calculateRotationAngle(x, y);
@@ -1676,8 +1780,9 @@
                             <div>指定庄家</div>
                         </div>
                     `;
-                    clone.style.left = `${x - 80}px`;
-                    clone.style.top = `${y - 40}px`;
+                    const offset = getCardOffset();
+                    clone.style.left = `${x - offset.x}px`;
+                    clone.style.top = `${y - offset.y}px`;
                     
                     const angle = calculateRotationAngle(x, y);
                     clone.style.transform = `rotate(${angle}deg)`;
