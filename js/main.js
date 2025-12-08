@@ -566,6 +566,18 @@ createApp({
             
             window.addEventListener('resize', handleResize);
             // 移除 orientationchange 监听
+
+            // Tutorial Check
+            setTimeout(() => {
+                if (!localStorage.getItem('mj_tutorial_seen')) {
+                    startTutorial();
+                }
+            }, 1000); // Delay slightly to let animations finish
+
+            // Finish Loading
+            if (window.finishLoader) {
+                window.finishLoader();
+            }
         });
 
         // Theme
@@ -1352,6 +1364,201 @@ createApp({
             }
         };
 
+        const standUp = () => {
+            seats.value[activeSeatIndex.value] = null;
+            closeModal('seat');
+            saveState();
+        };
+
+        // Tutorial State
+        const tutorialState = ref({
+            active: false,
+            step: 0,
+            showReplay: false
+        });
+
+        const tutorialSteps = [
+            {
+                target: '.player-card.empty-seat', // 1
+                fallbackTarget: '.player-card',
+                message: '点击任意座位添加玩家（支持超过四名玩家计分）',
+                position: 'bottom'
+            },
+            {
+                target: '.next-round-btn', // 2
+                message: '所有座位都入座前，拖动"下一局"到座位可指定初始庄家',
+                position: 'top'
+            },
+            {
+                target: '.player-card:not(.empty-seat)', // 3 (will fallback if no player seated)
+                fallbackTarget: '.player-card', 
+                message: '点击已入座玩家可更换或下座',
+                position: 'bottom'
+            },
+            {
+                target: '.center-dial', // 4
+                message: '中间显示当前圈风（东南西北）和局数，点击可以打骰子',
+                position: 'bottom'
+            },
+            {
+                target: '.next-round-btn', // 5
+                message: '点击直接轮庄给下家；拖动到座位可指定下一局庄家',
+                position: 'top'
+            },
+            {
+                target: '.dealer-badge', // Extra: Dealer info
+                message: '庄家右上角显示连庄次数',
+                position: 'bottom' 
+            },
+            {
+                target: '.header', // 6
+                message: '顶部栏：缩放、图表、历史、锁屏、教程、设置',
+                position: 'bottom'
+            }
+        ];
+        
+        const currentTutorialStep = computed(() => {
+            if (!tutorialState.value.active) return null;
+            return tutorialSteps[tutorialState.value.step];
+        });
+
+        const startTutorial = () => {
+            modals.value.settings = false; // Close settings modal if open
+            tutorialState.value.active = true;
+            tutorialState.value.step = 0;
+        };
+
+        const nextTutorial = () => {
+            if (tutorialState.value.step < tutorialSteps.length - 1) {
+                tutorialState.value.step++;
+            } else {
+                endTutorial();
+            }
+        };
+
+        const prevTutorial = () => {
+            if (tutorialState.value.step > 0) {
+                tutorialState.value.step--;
+            }
+        };
+
+        const endTutorial = () => {
+            tutorialState.value.active = false;
+            localStorage.setItem('mj_tutorial_seen', 'true');
+        };
+
+        // Tutorial Spotlight Logic
+        const spotlightStyle = ref({});
+        const messageStyle = ref({});
+
+        const updateTutorialSpotlight = () => {
+            if (!tutorialState.value.active) return;
+            
+            const step = tutorialSteps[tutorialState.value.step];
+            if (!step) return;
+
+            nextTick(() => {
+                let target = document.querySelector(step.target);
+                if (!target && step.fallbackTarget) {
+                    target = document.querySelector(step.fallbackTarget);
+                }
+
+                if (target) {
+                    const rect = target.getBoundingClientRect();
+                    const padding = 10;
+                    
+                    // Spotlight box around target
+                    spotlightStyle.value = {
+                        top: `${rect.top - padding}px`,
+                        left: `${rect.left - padding}px`,
+                        width: `${rect.width + padding * 2}px`,
+                        height: `${rect.height + padding * 2}px`,
+                        opacity: 1
+                    };
+
+                    // Message box position
+                    const msgRect = { width: 280, height: 100 }; // Est
+                    let msgTop = 0;
+                    let msgLeft = rect.left + rect.width / 2 - 140; // Center horizontally
+
+                    // Clamp horizontal
+                    if (msgLeft < 20) msgLeft = 20;
+                    if (msgLeft + 280 > window.innerWidth - 20) msgLeft = window.innerWidth - 300;
+
+                    // Vertical Auto-Positioning
+                    // Default based on step config
+                    let preferTop = step.position === 'top';
+                    
+                    // If preference is bottom, check if there's enough space below
+                    // Message box height approx 150px with buttons
+                    const msgHeight = 150; 
+                    const spaceBelow = window.innerHeight - (rect.bottom + padding + 20);
+                    const spaceAbove = rect.top - padding - 20;
+
+                    if (!preferTop && spaceBelow < msgHeight) {
+                        // Not enough space below, try top
+                        if (spaceAbove > msgHeight) {
+                            preferTop = true;
+                        }
+                    } else if (preferTop && spaceAbove < msgHeight) {
+                        // Not enough space above, try bottom
+                        if (spaceBelow > msgHeight) {
+                            preferTop = false;
+                        }
+                    }
+
+                    if (preferTop) {
+                        msgTop = rect.top - padding - 20; // Position immediately above spotlight
+                        // Adjust translate to move it up by 100% of its own height
+                        // Since we don't know exact height, we can use style transform or just enough px
+                        // Better: use transform: translateY(-100%) in CSS if we position at top edge
+                        // Or here calculate an offset. 
+                        // Let's use CSS transform approach for dynamic height:
+                        // If top-aligned, we set top to rect.top - padding - 10
+                        // And use transform: translateY(-100%)
+                        
+                        // Current logic:
+                        // msgTop = rect.top - padding - 120; // Hardcoded 120 height
+                        
+                        // Improved logic:
+                        msgTop = rect.top - padding - 16;
+                        messageStyle.value = {
+                            top: `${msgTop}px`,
+                            left: `${msgLeft}px`,
+                            opacity: 1,
+                            transform: 'translateY(-100%)' // Shift up by full height
+                        };
+                    } else {
+                        msgTop = rect.bottom + padding + 16; // Below
+                        messageStyle.value = {
+                            top: `${msgTop}px`,
+                            left: `${msgLeft}px`,
+                            opacity: 1,
+                            transform: 'none'
+                        };
+                    }
+                } else {
+                    // Fallback if target not found (e.g. Center screen)
+                    spotlightStyle.value = { opacity: 0 };
+                    messageStyle.value = { 
+                        top: '50%', 
+                        left: '50%', 
+                        transform: 'translate(-50%, -50%)',
+                        opacity: 1 
+                    };
+                }
+            });
+        };
+
+        watch(() => [tutorialState.value.step, tutorialState.value.active], () => {
+             updateTutorialSpotlight();
+        });
+        
+        // Also update on resize
+        onMounted(() => {
+            window.addEventListener('resize', updateTutorialSpotlight);
+        });
+
         // Chart
         const showStats = () => {
             modals.value.stats = true;
@@ -1497,7 +1704,7 @@ createApp({
             formatTime, clearData,
             showStats, showHistory: () => modals.value.history = true, showSettings: () => modals.value.settings = true, showRoundModal: () => {},
             showHelp: () => modals.value.help = true,
-            showOriginSet, updateOrigin, setOriginToZero,
+            showOriginSet, updateOrigin, setOriginToZero, standUp,
             // Zoom
             adjustScale, globalScale, canZoomIn, canZoomOut,
             // Drag and Drop (Player Cards)
@@ -1509,7 +1716,10 @@ createApp({
             handleNextRoundTouchStart, handleNextRoundTouchMove, handleNextRoundTouchEnd,
             
             // Dice
-            diceMode, isRolling, hasRolled, diceStyles, handleDialClick, closeDiceMode
+            diceMode, isRolling, hasRolled, diceStyles, handleDialClick, closeDiceMode,
+
+            // Tutorial
+            tutorialState, currentTutorialStep, startTutorial, nextTutorial, prevTutorial, endTutorial, spotlightStyle, messageStyle
         };
     }
 }).mount('#app');
