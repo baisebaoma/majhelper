@@ -18,6 +18,7 @@
             width: 100%;
             height: 100%;
             background: #f5f7fa;
+            color: var(--text-primary);
             z-index: 9999;
             display: flex;
             flex-direction: column;
@@ -27,12 +28,12 @@
         }
         .dark #app-loading {
             background: #1a1a1a;
-            color: #fff;
+            color: var(--text-primary);
         }
         .loading-logo {
             font-size: 48px;
             margin-bottom: 20px;
-            color: #6366f1;
+            color: var(--primary);
             animation: bounce 2s infinite;
         }
         .loading-bar-container {
@@ -77,7 +78,8 @@
         .tutorial-message-box {
             position: absolute;
             width: 280px;
-            background: #fff;
+            background: var(--surface-modal);
+            color: var(--text-primary);
             padding: 20px;
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2);
@@ -86,7 +88,6 @@
         }
         .dark .tutorial-message-box {
             background: #2d2d2d;
-            color: #fff;
         }
         .tutorial-text {
             font-size: 15px;
@@ -101,13 +102,13 @@
         .btn-text {
             background: none;
             border: none;
-            color: #999;
+            color: var(--text-muted);
             font-size: 13px;
             padding: 8px;
         }
         .btn-primary-small {
             background: #6366f1;
-            color: white;
+            color: var(--text-on-accent);
             border: none;
             padding: 6px 16px;
             border-radius: 16px;
@@ -115,7 +116,7 @@
         }
         .btn-secondary-small {
             background: rgba(0,0,0,0.1);
-            color: inherit;
+            color: var(--text-primary);
             border: none;
             padding: 6px 16px;
             border-radius: 16px;
@@ -134,12 +135,23 @@
     </style>
 </head>
 <body>
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('mj_theme');
+                var dark = saved
+                    ? saved === 'dark'
+                    : window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (dark) document.body.classList.add('dark');
+            } catch (e) { /* ignore */ }
+        })();
+    </script>
     <div id="app-loading">
         <div class="loading-logo"><i class="fas fa-dice"></i></div>
         <div class="loading-bar-container">
             <div class="loading-bar" id="loading-progress"></div>
         </div>
-        <div style="margin-top: 10px; font-size: 14px; opacity: 0.6;">加载中...</div>
+        <div class="loading-text">加载中...</div>
     </div>
     <script>
         // Initialize loading animation immediately
@@ -204,6 +216,9 @@
                 <button class="icon-btn" @click="adjustScale(1)" :class="{ disabled: !canZoomIn }" :style="{ pointerEvents: isLocked ? 'none' : 'auto' }" data-tooltip="放大">
                     <i class="fas fa-plus"></i>
                 </button>
+                <button class="icon-btn" @click="resetScaleAutoFit" :class="{ active: scaleAutoFit }" :style="{ pointerEvents: isLocked ? 'none' : 'auto' }" data-tooltip="适应屏幕">
+                    <i class="fas fa-expand-arrows-alt"></i>
+                </button>
                 <button class="icon-btn" @click="showStats" :style="{ pointerEvents: isLocked ? 'none' : 'auto' }" data-tooltip="统计图表">
                     <i class="fas fa-chart-line"></i>
                 </button>
@@ -223,7 +238,7 @@
         </header>
 
         <!-- 游戏主区域 -->
-        <main class="game-area">
+        <main class="game-area" :class="{ 'mode-sanma': gameMode === 'sanma-3', 'mode-riichi': isRiichi, 'layout-ready': layoutReady }">
             <!-- 骰子模式遮罩 -->
             <div class="dice-overlay" :class="{ show: diceMode }" @click="closeDiceMode"></div>
 
@@ -239,14 +254,20 @@
                      pointerEvents: isLocked ? 'none' : 'auto'
                  }"
                  @click="handleDialClick">
-                <!-- 只有当该方向对应的是东(dealerIndex)时才高亮 -->
-                <div class="direction dir-0 is-east">東</div>
-                <div class="direction dir-1">南</div>
-                <div class="direction dir-2">西</div>
-                <div class="direction dir-3">北</div>
+                <template v-if="!isRiichi">
+                    <div class="direction dir-0 is-east">東</div>
+                    <div class="direction dir-1">南</div>
+                    <div class="direction dir-2">西</div>
+                    <div class="direction dir-3">北</div>
+                </template>
                 
-                <!-- 数字直接显示，跟随父容器旋转，正对庄家 -->
-                <div class="dial-round">{{ currentRound }}</div>
+                <!-- 局数 / 场况 -->
+                <div class="dial-round">{{ handLabel }}</div>
+                <div v-if="isRiichi" class="dial-field-info">
+                    <span>本场 {{ honba }}</span>
+                    <span class="field-sep">·</span>
+                    <span>供托 {{ riichiSticks }}</span>
+                </div>
 
                 <!-- 骰子容器 -->
                 <div class="dice-container">
@@ -270,18 +291,21 @@
             </div>
 
             <!-- 玩家卡片 -->
-            <div v-for="(seat, index) in seats" :key="index" 
+            <div v-for="index in visibleSeatIndices" :key="index" 
                  class="player-card" 
+                 :data-seat-index="index"
                  :class="[
-                     `pos-${index}`, 
-                     { dealer: dealerIndex === index },
+                     `pos-${displayPosForSeat(index)}`, 
+                     { dealer: dealerIndex === index && seats[index] },
+                     { 'riichi-declared': playerRiichi[index] },
                      { dragging: dragState.dragging && dragState.fromIndex === index && !dragState.draggingNextRound },
-                     { 'drag-over': dragState.overIndex === index && (dragState.fromIndex !== index || dragState.draggingNextRound) && (seat || dragState.draggingNextRound) },
-                     { 'empty-seat': !seat }
+                     { 'drag-over': dragState.overIndex === index && (dragState.fromIndex !== index || dragState.draggingNextRound) && (seats[index] || dragState.draggingNextRound) },
+                     { 'empty-seat': !seats[index] && !isSanmaSeatLocked(index) },
+                     { 'sanma-ghost': isSanmaSeatLocked(index) }
                  ]"
                  :style="{ '--scale-factor': globalScale, pointerEvents: isLocked ? 'none' : 'auto' }"
-                 :draggable="!isLocked && seat ? true : false"
-                 @click="handleSeatClick(index)"
+                 :draggable="!isLocked && seats[index] ? true : false"
+                 @click="seats[index] ? handlePlayerCardClick(index) : (isSanmaSeatLocked(index) ? null : handleSeatClick(index))"
                  @dragstart="handleDragStart(index, $event)"
                  @dragend="handleDragEnd"
                  @dragover="handleDragOver(index, $event)"
@@ -291,24 +315,39 @@
                  @touchmove="handleTouchMove($event)"
                  @touchend="handleTouchEnd($event)">
                 <!-- 庄家标记 -->
-                <div v-if="dealerIndex === index && seat" class="dealer-badge">
+                <div v-if="dealerIndex === index && seats[index]" class="dealer-badge">
                     <i v-if="dealerStreak === 0" class="fas fa-crown"></i>
                     <span v-else>{{ dealerStreak }}</span>
                 </div>
-                
-                <div v-if="seat" style="width: 100%; text-align: center;">
-                    <div class="player-name">{{ seat }}</div>
+
+                <div v-if="seats[index] && isRiichi"
+                     class="riichi-stick-slot"
+                     :class="[{ placed: playerRiichi[index] }, `slot-pos-${displayPosForSeat(index)}`]"
+                     role="button"
+                     :aria-label="playerRiichi[index] ? '撤销立直棒' : '放置立直棒'"
+                     @click.stop="toggleRiichiStick(index, $event)"
+                     @touchstart.stop>
+                    <div v-if="playerRiichi[index]" class="riichi-stick-bar" aria-hidden="true"></div>
+                </div>
+
+                <div v-if="seats[index]" style="width: 100%; text-align: center;">
+                    <div class="player-name" @click.stop="handleSeatClick(index)">{{ seats[index] }}</div>
                     <div class="player-score">
-                        <count-up :to="getPlayerScore(seat)"></count-up>
+                        <count-up :to="getPlayerScore(seats[index])"></count-up>
                     </div>
+                    <div v-if="isRiichi" class="seat-wind-label">{{ getSeatWind(index) }}</div>
                     <div class="score-diff">
-                        <span v-if="lastDiff[seat]" :class="lastDiff[seat] > 0 ? 'diff-pos' : 'diff-neg'">
-                            {{ lastDiff[seat] > 0 ? '+' : '' }}{{ lastDiff[seat] }}
+                        <span v-if="lastDiff[seats[index]]" :class="lastDiff[seats[index]] > 0 ? 'diff-pos' : 'diff-neg'">
+                            {{ lastDiff[seats[index]] > 0 ? '+' : '' }}{{ lastDiff[seats[index]] }}
                         </span>
                     </div>
                 </div>
-                <div v-else style="width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.5;">
-                    <i class="fas fa-plus-circle" style="margin-bottom: 8px; font-size: 24px;"></i>
+                <div v-else-if="isSanmaSeatLocked(index)" class="sanma-ghost-inner">
+                    <div class="sanma-ghost-label">北</div>
+                    <div class="sanma-ghost-sub">缺席</div>
+                </div>
+                <div v-else class="empty-seat-hint">
+                    <i class="fas fa-plus-circle"></i>
                     <div>入座</div>
                 </div>
             </div>
@@ -319,7 +358,14 @@
             <button class="btn btn-warning" @click="undo" :disabled="history.length === 0" :style="{ opacity: history.length ? 1 : 0.5, pointerEvents: isLocked ? 'none' : 'auto' }">
                 <i class="fas fa-undo"></i> 撤销
             </button>
+            <button v-if="isRiichi" class="btn btn-secondary" @click="openRyukyoku" :style="{ pointerEvents: isLocked ? 'none' : 'auto' }">
+                流局
+            </button>
+            <button v-if="isRiichi" class="btn btn-primary" @click="endRiichiMatch" :style="{ flex: 1, justifyContent: 'center', pointerEvents: isLocked ? 'none' : 'auto' }">
+                完场
+            </button>
             <button 
+                v-if="!isRiichi"
                 class="btn btn-secondary next-round-btn" 
                 :class="{ dragging: dragState.draggingNextRound }"
                 :draggable="!isLocked"
@@ -422,7 +468,7 @@
                     </div>
                 </div>
                 <div class="seat-modal-actions">
-                    <button v-if="seats[activeSeatIndex]" class="btn btn-danger" style="background: #ef4444; color: white;" @click="standUp">
+                    <button v-if="seats[activeSeatIndex]" class="btn btn-danger" @click="standUp">
                         <i class="fas fa-sign-out-alt"></i> 下座
                     </button>
                     <button class="btn btn-secondary" :style="{ gridColumn: seats[activeSeatIndex] ? 'auto' : '1 / -1', width: '100%' }" @click="closeModal('seat')">取消</button>
@@ -434,15 +480,21 @@
         <div class="modal-overlay" :class="{ show: modals.history }" @click="closeModal('history')">
             <div class="modal-card" @click.stop>
                 <div class="modal-title">历史记录</div>
-                <div v-if="history.length === 0" style="text-align: center; opacity: 0.5; padding: 20px;">暂无记录</div>
+                <div v-if="history.length === 0" class="text-empty">暂无记录</div>
                 <div v-else style="max-height: 400px; overflow-y: auto;">
                     <div v-for="(h, i) in history" :key="i" class="history-item">
                         <div class="history-meta">
-                            <span>第 {{ h.round }} 局</span>
+                            <span>{{ h.handLabel ? h.handLabel : ('第 ' + h.round + ' 局') }}</span>
                             <span>{{ formatTime(h.time) }}</span>
                         </div>
+                        <div v-if="h.type === 'riichi-win'" class="history-trans history-sub">
+                            {{ h.winType === 'tsumo' ? '自摸' : '荣和' }}
+                            <span v-if="h.yakuman"> · {{ h.yakumanLevel || 1 }}倍役满</span>
+                            <span v-else> · {{ h.fan }}番{{ h.fu }}符</span>
+                        </div>
+                        <div v-if="h.type === 'ryukyoku'" class="history-trans history-sub">流局（不听罚符）</div>
                         <div v-for="(t, ti) in h.transactions" :key="ti" class="history-trans">
-                            {{ t.from }} <i class="fas fa-arrow-right" style="font-size: 10px; opacity: 0.5;"></i> {{ t.to }} : 
+                            {{ t.from }} <i class="fas fa-arrow-right history-arrow"></i> {{ t.to }} :
                             <span class="trans-amount">{{ t.amount }}</span>
                         </div>
                     </div>
@@ -471,6 +523,26 @@
             <div class="modal-card" @click.stop>
                 <div class="modal-title">设置</div>
 
+                <div class="list-item" style="flex-direction: column; align-items: stretch; gap: 8px; cursor: default;">
+                    <span><i class="fas fa-gamepad" style="margin-right: 8px;"></i> 游戏模式：{{ gameModeLabel }}</span>
+                    <div class="mode-pills">
+                        <button type="button" class="mode-pill" :class="{ active: gameMode === 'generic' }" @click="setGameMode('generic')">通用</button>
+                        <button type="button" class="mode-pill" :class="{ active: gameMode === 'riichi-4' }" @click="setGameMode('riichi-4')">立直四麻</button>
+                        <button type="button" class="mode-pill" :class="{ active: gameMode === 'sanma-3' }" @click="setGameMode('sanma-3')">三麻</button>
+                    </div>
+                </div>
+
+                <!-- 自动适应屏幕 -->
+                <div class="list-item" style="cursor: default; justify-content: space-between;">
+                    <div style="display: flex; align-items: center;">
+                        <i class="fas fa-expand-arrows-alt" style="margin-right: 8px; width: 16px; text-align: center;"></i>
+                        <span>打开时自动适应屏幕</span>
+                    </div>
+                    <div class="toggle-switch" :class="{ active: scaleAutoFit }" @click="toggleScaleAutoFit">
+                        <div class="toggle-handle"></div>
+                    </div>
+                </div>
+
                 <!-- 日间/夜间模式开关 -->
                 <div class="list-item" style="cursor: default; justify-content: space-between;">
                     <div style="display: flex; align-items: center;">
@@ -495,15 +567,15 @@
                 </div>
 
                 <!-- 开源信息 -->
-                <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(0,0,0,0.1); text-align: center; font-size: 12px; opacity: 0.6; line-height: 1.8;">
+                <div class="settings-footer">
                     <div>开发者: baisebaoma</div>
                     <div>
-                        <a href="https://github.com/baisebaoma/majhelper" target="_blank" style="color: inherit; text-decoration: none;">
+                        <a href="https://github.com/baisebaoma/majhelper" target="_blank">
                             <i class="fab fa-github"></i> GitHub 仓库
                         </a>
                     </div>
                     <div>
-                        <a href="https://baisebaoma.github.io/majhelper/" target="_blank" style="color: inherit; text-decoration: none;">
+                        <a href="https://baisebaoma.github.io/majhelper/" target="_blank">
                             <i class="fas fa-globe"></i> 在线访问
                         </a>
                     </div>
@@ -537,7 +609,7 @@
         <div class="modal-overlay" :class="{ show: modals.originSet }" @click="closeModal('originSet')">
             <div class="modal-card" @click.stop>
                 <div class="modal-title">设置原点</div>
-                <div v-if="players.length === 0" style="text-align: center; opacity: 0.5; padding: 40px 20px;">
+                <div v-if="players.length === 0" class="text-empty-lg">
                     至少需要一个玩家
                 </div>
                 <div v-else style="max-height: 400px; overflow-y: auto;">
@@ -549,7 +621,7 @@
                             </button>
                         </div>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <span style="font-size: 14px; opacity: 0.7;">起始分数：</span>
+                            <span class="origin-label">起始分数：</span>
                             <input 
                                 type="number" 
                                 :value="p.origin || 0" 
@@ -558,7 +630,7 @@
                                 style="flex: 1; margin: 0; padding: 8px 12px;"
                                 placeholder="0">
                         </div>
-                        <div style="font-size: 12px; opacity: 0.5; margin-top: 4px;">
+                        <div class="origin-hint">
                             当前分数: {{ getPlayerCurrentScore(p.name) }} | 显示分数: {{ getPlayerScore(p.name) }}
                         </div>
                     </div>
@@ -574,21 +646,30 @@
             <div class="modal-card" @click.stop style="max-height: calc(100vh - 280px); display: flex; flex-direction: column;">
                 <div class="modal-title" style="flex-shrink: 0;">操作说明</div>
                 <div class="help-section" style="flex: 1; overflow-y: auto; min-height: 0; padding: 12px; margin-bottom: 8px;">
-                    <div style="font-size: 13px; line-height: 1.5; opacity: 0.8;">
+                    <div class="help-body-text">
                         <div style="margin-bottom: 8px;">
                             <strong>📊 局数与连庄：</strong>中间风盘数字表示当前第几局；庄家右上角显示皇冠表示首次当庄，显示数字表示连庄次数（如显示1表示连庄1次，即第2次当庄）
                         </div>
                         <div style="margin-bottom: 8px;">
-                            <strong>💰 结算分数：</strong>拖动玩家A到玩家B，输入分数后确认（A给B分数）
+                            <strong>💰 日麻结算：</strong>点玩家卡片=自摸；拖放铳者到赢家=荣和；点名字=换座。
                         </div>
                         <div style="margin-bottom: 8px;">
+                            <strong>🀄 立直：</strong>点玩家卡片旁的虚线立直棒框放棒（-1000）；再点一次撤销。
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <strong>🀄 场况：</strong>本场/供托/连庄在和了或流局后自动维护（对齐 OMC）。流局时标记不听与庄家是否听牌。
+                        </div>
+                        <div v-if="!isRiichi" style="margin-bottom: 8px;">
                             <strong>👑 指定初始庄家：</strong>在未坐满前，拖动"下一局"到任意位置指定初始庄家（不增加局数）
                         </div>
-                        <div style="margin-bottom: 8px;">
+                        <div v-if="!isRiichi" style="margin-bottom: 8px;">
                             <strong>🎲 指定庄家：</strong>游戏中，拖动"下一局"到玩家身上进行换庄或连庄
                         </div>
-                        <div style="margin-bottom: 8px;">
+                        <div v-if="!isRiichi" style="margin-bottom: 8px;">
                             <strong>🔄 自动换庄：</strong>点击"下一局"按钮，自动换庄到下一家并进入下一局
+                        </div>
+                        <div v-if="isRiichi" style="margin-bottom: 8px;">
+                            <strong>🏁 完场：</strong>点击「完场」结算剩余供托并查看终局排名；立直模式下无需手动「下一局」。
                         </div>
                         <div style="margin-bottom: 8px;">
                             <strong>🎲 打骰子：</strong>点击中间圆盘进入骰子模式，再次点击进行掷骰子
@@ -603,6 +684,219 @@
                 </div>
                 <button class="btn btn-primary" style="width: 100%; margin-top: 16px; flex-shrink: 0;" @click="closeModal('help')">
                     <i class="fas fa-check"></i> 关闭
+                </button>
+            </div>
+        </div>
+
+        <!-- 9. 日麻和了结算 -->
+        <div class="modal-overlay settle-modal-overlay" :class="{ show: modals.riichiSettle }" @click="closeRiichiSettle">
+            <div class="modal-card riichi-settle-card" @click.stop>
+                <div class="rs-sheet-handle" aria-hidden="true"></div>
+
+                <div class="rs-header">
+                    <span class="rs-win-badge" :class="riichiSettle.winType === 'tsumo' ? 'rs-badge-tsumo' : 'rs-badge-ron'">
+                        {{ riichiSettle.winType === 'tsumo' ? '自摸' : '荣和' }}
+                    </span>
+                    <div class="rs-title">{{ riichiSettle.winType === 'tsumo' ? '自摸和了' : '荣和结算' }}</div>
+                    <p class="rs-meta">{{ riichiSettle.summary }}</p>
+                </div>
+
+                <div class="rs-score-hero" :class="{ 'rs-score-empty': !riichiSettle.preview }">
+                    <div class="rs-tier">{{ riichiScoreTierLabel }}</div>
+                    <div class="rs-points" v-if="riichiSettle.preview">
+                        {{ riichiSettle.preview.defen }}<span class="rs-pts-unit">点</span>
+                    </div>
+                    <div class="rs-points rs-points-placeholder" v-else>—</div>
+                    <div class="rs-hanfu-line" v-if="riichiSettle.yakuman">
+                        {{ formatYakumanLabel(riichiSettle.fan) }}
+                    </div>
+                    <div class="rs-hanfu-line" v-else>
+                        {{ riichiSettle.fan }} 番 · {{ riichiSettle.fu }} 符
+                    </div>
+                </div>
+
+                <div class="rs-section">
+                    <div class="rs-section-label">快捷档位</div>
+                    <div class="rs-preset-grid">
+                        <button
+                            v-for="p in SCORE_PRESETS"
+                            :key="p.label"
+                            type="button"
+                            class="rs-preset-btn"
+                            :class="{ active: isRiichiPresetActive(p) }"
+                            @click="applyScorePreset(p)"
+                        >{{ p.label }}</button>
+                    </div>
+                </div>
+
+                <div class="rs-stepper-row">
+                    <div class="rs-stepper" :class="{ 'rs-stepper-wide': riichiSettle.yakuman }">
+                        <div class="rs-stepper-label">{{ riichiSettle.yakuman ? '役满' : '番' }}</div>
+                        <div class="rs-stepper-controls">
+                            <button type="button" class="rs-step-btn" aria-label="减少番" @click="adjustRiichiFan(-1)">−</button>
+                            <span class="rs-step-value" :class="{ 'rs-step-value-yakuman': riichiSettle.yakuman }">
+                                {{ riichiSettle.yakuman ? formatYakumanLabel(riichiSettle.fan) : riichiSettle.fan }}
+                            </span>
+                            <button type="button" class="rs-step-btn" aria-label="增加番" @click="adjustRiichiFan(1)">+</button>
+                        </div>
+                    </div>
+                    <div class="rs-stepper" v-if="!riichiSettle.yakuman">
+                        <div class="rs-stepper-label">符</div>
+                        <div class="rs-stepper-controls">
+                            <button type="button" class="rs-step-btn" aria-label="减少符" @click="stepRiichiFu(-1)">−</button>
+                            <span class="rs-step-value">{{ riichiSettle.fu }}</span>
+                            <button type="button" class="rs-step-btn" aria-label="增加符" @click="stepRiichiFu(1)">+</button>
+                        </div>
+                        <div class="rs-fu-hints">
+                            <button
+                                v-for="fu in FU_HINTS"
+                                :key="'fu'+fu"
+                                type="button"
+                                class="rs-fu-hint"
+                                :class="{ active: riichiSettle.fu === fu }"
+                                @click="setRiichiFu(fu)"
+                            >{{ fu }}</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="riichiSettle.preview" class="rs-preview">
+                    <div class="rs-section-label">各家得失</div>
+                    <div
+                        v-for="index in visibleSeatIndices"
+                        :key="'pv'+index"
+                        class="rs-preview-row"
+                        :class="{ 'rs-preview-winner': index === riichiSettle.winnerSeat }"
+                        v-show="seats[index]"
+                    >
+                        <span class="rs-preview-name">
+                            {{ seats[index] }}
+                            <span v-if="index === riichiSettle.winnerSeat" class="rs-winner-tag">和</span>
+                        </span>
+                        <span :class="riichiSettle.preview.physicalDeltas[index] >= 0 ? 'diff-pos' : 'diff-neg'" class="rs-preview-delta">
+                            {{ riichiSettle.preview.physicalDeltas[index] >= 0 ? '+' : '' }}{{ riichiSettle.preview.physicalDeltas[index] }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="rs-actions">
+                    <button class="btn btn-secondary" @click="closeRiichiSettle">取消</button>
+                    <button class="btn btn-primary" @click="confirmRiichiSettle" :disabled="!riichiSettle.preview">
+                        确认结算
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 10. 流局 -->
+        <div class="modal-overlay settle-modal-overlay" :class="{ show: modals.ryukyoku }" @click="closeModal('ryukyoku')">
+            <div class="modal-card ryukyoku-card" @click.stop>
+                <div class="rs-sheet-handle" aria-hidden="true"></div>
+
+                <div class="rk-header">
+                    <span class="rk-badge">流局</span>
+                    <div class="rs-title">不听罚符</div>
+                    <p class="rs-meta">{{ handLabel }} · 本场 {{ honba }} · 供托 {{ riichiSticks }}</p>
+                </div>
+
+                <div class="rk-hint-bar" :class="ryukyokuDealerTenpai ? 'rk-hint-renchan' : 'rk-hint-rotate'">
+                    <i class="fas" :class="ryukyokuDealerTenpai ? 'fa-redo' : 'fa-exchange-alt'"></i>
+                    <span>{{ ryukyokuDealerTenpai ? '庄家听牌 → 连庄（本场 +1）' : '庄家不听 → 过庄' }}</span>
+                </div>
+
+                <div class="rk-toolbar">
+                    <span class="rs-section-label" style="margin: 0;">听牌状态</span>
+                    <button type="button" class="rk-quick-btn" @click="setAllRyukyokuTenpai(true)">全部听牌</button>
+                    <button type="button" class="rk-quick-btn" @click="setAllRyukyokuTenpai(false)">全部不听</button>
+                </div>
+
+                <div class="rk-player-list">
+                    <div
+                        v-for="index in visibleSeatIndices"
+                        :key="'rn'+index"
+                        v-show="seats[index]"
+                        class="rk-player-row"
+                        :class="{ 'rk-player-dealer': index === dealerIndex }"
+                    >
+                        <div class="rk-player-info">
+                            <span class="rk-player-name">{{ seats[index] }}</span>
+                            <span class="rk-player-meta">
+                                <span class="rk-wind-tag">{{ getSeatWind(index) }}</span>
+                                <span v-if="index === dealerIndex" class="rk-dealer-tag">庄</span>
+                            </span>
+                        </div>
+                        <div class="rk-segment">
+                            <button
+                                type="button"
+                                class="rk-segment-btn"
+                                :class="{ active: !ryukyokuNoten[index] }"
+                                @click="setRyukyokuTenpai(index, true)"
+                            >听牌</button>
+                            <button
+                                type="button"
+                                class="rk-segment-btn rk-segment-noten"
+                                :class="{ active: ryukyokuNoten[index] }"
+                                @click="setRyukyokuTenpai(index, false)"
+                            >不听</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="ryukyokuHasPenalty" class="rs-preview rk-preview">
+                    <div class="rs-section-label">罚符预览</div>
+                    <div
+                        v-for="index in visibleSeatIndices"
+                        :key="'rp'+index"
+                        class="rs-preview-row"
+                        :class="{ 'rk-preview-noten': ryukyokuNoten[index] }"
+                        v-show="seats[index] && ryukyokuPreviewDeltas[index] !== 0"
+                    >
+                        <span class="rs-preview-name">{{ seats[index] }}</span>
+                        <span :class="ryukyokuPreviewDeltas[index] >= 0 ? 'diff-pos' : 'diff-neg'" class="rs-preview-delta">
+                            {{ ryukyokuPreviewDeltas[index] >= 0 ? '+' : '' }}{{ ryukyokuPreviewDeltas[index] }}
+                        </span>
+                    </div>
+                </div>
+                <div v-else class="rk-no-penalty">
+                    <i class="fas fa-check-circle"></i>
+                    全员听牌，无不听罚符
+                </div>
+
+                <div class="rs-actions">
+                    <button class="btn btn-secondary" @click="closeModal('ryukyoku')">取消</button>
+                    <button class="btn btn-primary" @click="confirmRyukyoku">确认流局</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 11. 终局结果 -->
+        <div class="modal-overlay match-end-overlay" :class="{ show: modals.matchEnd }" @click="closeModal('matchEnd')">
+            <div class="modal-card match-end-card" @click.stop>
+                <div class="match-end-header">
+                    <span class="me-badge">完场</span>
+                    <div class="modal-title" style="margin-bottom: 4px;">终局结果</div>
+                    <p v-if="matchEndSticksNote" class="me-sticks-note">{{ matchEndSticksNote }}</p>
+                </div>
+                <div class="match-end-list">
+                    <div
+                        v-for="entry in matchEndRankings"
+                        :key="entry.name"
+                        class="rank-line"
+                        :class="{ 'rank-line-champion': entry.rank === 1 }"
+                    >
+                        <span class="rank">#{{ entry.rank }}</span>
+                        <span class="rank-name">
+                            <span class="rank-name-row">
+                                {{ entry.name }}
+                                <span v-if="entry.rank === 1" class="champion-badge">冠军</span>
+                            </span>
+                            <span class="rank-wind">{{ entry.wind }}</span>
+                        </span>
+                        <span class="rank-score">{{ entry.score }}</span>
+                    </div>
+                </div>
+                <button class="btn btn-primary" style="width: 100%; margin-top: 16px;" @click="closeModal('matchEnd')">
+                    关闭
                 </button>
             </div>
         </div>

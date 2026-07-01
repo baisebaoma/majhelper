@@ -2,26 +2,20 @@
 .toggle-switch {
     width: 50px;
     height: 30px;
-    background-color: #e5e7eb;
+    background-color: var(--border-default);
     border-radius: 15px;
     position: relative;
     cursor: pointer;
     transition: background-color 0.3s;
 }
 .toggle-switch.active {
-    background-color: var(--primary); /* Green or Primary color */
-}
-body.dark .toggle-switch {
-    background-color: #4b5563;
-}
-body.dark .toggle-switch.active {
     background-color: var(--primary);
 }
 
 .toggle-handle {
     width: 26px;
     height: 26px;
-    background-color: white;
+    background-color: var(--surface-modal);
     border-radius: 50%;
     position: absolute;
     top: 2px;

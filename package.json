@@ -1,0 +1,8 @@
+{
+  "name": "majhelper",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test js/layout-scale.test.js js/riichi/defen.test.js js/riichi/session.test.js js/riichi/settle.test.js"
+  }
+}

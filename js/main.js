@@ -1,3 +1,54 @@
+import { saveGameState, loadGameState, clearGameStorage, defaultRiichiSession, startingScoreForMode } from './store.js';
+import {
+    isRiichiMode,
+    playerCountForMode,
+    formatHandLabel,
+    advanceAfterWin,
+    advanceAfterRyukyoku,
+    notenPenaltyDeltas,
+    seatWindForSeat,
+    sanmaAbsentSeat,
+    RIICHI_DEPOSIT,
+} from './riichi/session.js';
+import {
+    computeRiichiSettlement,
+    SCORE_PRESETS,
+    buildWinSummary,
+    FU_STEPS,
+    FU_HINTS,
+    MAX_FAN,
+    MAX_YAKUMAN,
+    formatYakumanLabel,
+} from './riichi/settle.js';
+import {
+    optimalScaleFromMax,
+    findMaxScaleByProbe,
+    debounce,
+    cardOffsetForScale,
+    applyCardOffsets,
+} from './layout-scale.js';
+
+function formatScoreTierLabel(fan, fu, yakuman, rule = {}) {
+    if (yakuman) return formatYakumanLabel(fan);
+    if (fan >= 13) return '累计役满';
+    if (fan >= 11) return '三倍满';
+    if (fan >= 8) return '倍满';
+    if (fan >= 6) return '跳满';
+    if (fan >= 5) return '满贯';
+    if (fan <= 0) return '—';
+    const raw = fu * (1 << (2 + fan));
+    if (rule.kiriageMangan && raw === 1920) return '切上满贯';
+    return `${fan}番${fu}符`;
+}
+
+function isScorePresetActive(preset, current) {
+    return (
+        !!preset.yakuman === !!current.yakuman
+        && preset.fan === current.fan
+        && (preset.yakuman || preset.fu === current.fu)
+    );
+}
+
 const { createApp, ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
 
 // 数字滚动组件
@@ -27,7 +78,7 @@ const CountUp = {
                 colorClass.value = '';
             }, 1500);
 
-            const duration = 1000;
+            const duration = Math.abs(end - start) >= 5000 ? 1000 : Math.abs(end - start) >= 500 ? 600 : 250;
             let startTime = null;
 
             const animate = (timestamp) => {
@@ -63,6 +114,30 @@ createApp({
         const dealerStreak = ref(0); // 当前庄家的连庄次数
         const history = ref([]);
         const lastDiff = ref({}); // { name: diff } for animation
+
+        // Riichi session
+        const gameMode = ref('generic');
+        const roundWind = ref(0);
+        const handNumber = ref(1);
+        const honba = ref(0);
+        const riichiSticks = ref(0);
+        const riichiRule = ref({ kiriageMangan: false, kazoeYakuman: true, renchanMode: 2 });
+        const initialDealerIndex = ref(0);
+        const playerRiichi = ref([false, false, false, false]);
+
+        // Riichi settle UI
+        const riichiSettle = ref({
+            open: false,
+            winType: 'tsumo',
+            winnerSeat: null,
+            payerSeat: null,
+            fan: 1,
+            fu: 30,
+            yakuman: false,
+            preview: null,
+            summary: '',
+        });
+        const ryukyokuNoten = ref([false, false, false, false]);
         
         // UI State
         const modals = ref({
@@ -74,8 +149,14 @@ createApp({
             settings: false,
             dealerSet: false,
             originSet: false, // 设置原点模态框
-            help: false // 操作说明模态框
+            help: false, // 操作说明模态框
+            ryukyoku: false,
+            riichiSettle: false,
+            matchEnd: false,
         });
+        
+        const matchEndRankings = ref([]);
+        const matchEndSticksNote = ref('');
         
         const activeSeatIndex = ref(null);
         const newPlayerName = ref('');
@@ -120,154 +201,142 @@ createApp({
         const globalScale = ref(1);
         const canZoomIn = ref(true);
         const canZoomOut = ref(true);
-        const scaleStep = 0.10; // 每次调整百分之多少
-        const absoluteMaxScale = 3.5; // 绝对最大缩放限制（原2.5提升40%）
+        const layoutReady = ref(false);
+        const scaleAutoFit = ref(localStorage.getItem('mj_scale_auto') !== '0');
+        const scaleStep = 0.10;
+        const absoluteMaxScale = 4.5;
+        let layoutResizeHandler = null;
+        let layoutObserver = null;
+        let layoutMaxScaleCache = null;
 
-        const adjustScale = (direction) => {
-            // Calculate potential new scale
-            const proposedScale = globalScale.value + (direction * scaleStep);
-            
-            // Calculate Max Possible Scale based on current DOM state
-            const maxScale = calculateMaxScale();
-            
-            if (direction > 0) {
-                // Zoom In
-                if (!canZoomIn.value) return;
-                
-                if (proposedScale >= maxScale) {
-                    // If proposed step exceeds max, clamp to max and disable zoom in
-                    globalScale.value = maxScale;
-                    canZoomIn.value = false;
-                } else {
-                    globalScale.value = proposedScale;
-                    // Re-check if we can still zoom in
-                    canZoomIn.value = globalScale.value < maxScale - 0.01; // Add epsilon
-                }
-                // Always allow zoom out after zooming in (unless at minimum)
-                canZoomOut.value = globalScale.value > 0.5;
-            } else {
-                // Zoom Out
-                if (!canZoomOut.value) return;
-                
-                if (proposedScale < 0.5) {
-                    globalScale.value = 0.5;
-                    canZoomOut.value = false;
-                    // Always allow zoom in after reaching minimum
-                    canZoomIn.value = globalScale.value < maxScale;
-                    // 保存缩放值到 localStorage
-                    localStorage.setItem('mj_scale', globalScale.value.toString());
-                    return;
-                }
-                
-                globalScale.value = proposedScale;
-                // Always allow zoom in after zooming out
-                canZoomIn.value = globalScale.value < maxScale;
-                canZoomOut.value = globalScale.value > 0.5;
-            }
-            
-            // 保存缩放值到 localStorage
+        const invalidateLayoutMaxScale = () => {
+            layoutMaxScaleCache = null;
+        };
+
+        const measureLayoutMaxScale = () => {
+            layoutMaxScaleCache = findMaxScaleByProbe(absoluteMaxScale);
+            return layoutMaxScaleCache;
+        };
+
+        const calculateMaxScale = () => {
+            if (layoutMaxScaleCache != null) return layoutMaxScaleCache;
+            return measureLayoutMaxScale();
+        };
+
+        const persistScale = (scale) => {
+            globalScale.value = Math.max(0.5, Math.min(absoluteMaxScale, scale));
             localStorage.setItem('mj_scale', globalScale.value.toString());
         };
-        
-        // Calculate the maximum scale allowed before collision or overflow
-        const calculateMaxScale = () => {
-            const card0 = document.querySelector('.pos-0');
-            const dial = document.querySelector('.center-dial');
-            
-            if (!card0 || !dial) return absoluteMaxScale; // Fallback max if DOM not ready
-            
-            // 获取元素尺寸
-            // 注意：我们需要原始（未缩放）的尺寸。
-            // getBoundingClientRect 获取的是变换后的尺寸。
-            // offsetHeight/offsetWidth 通常也是包含变换的（取决于浏览器，但在 Vue scale binding 下通常是）。
-            // 为了准确，我们除以当前的 globalScale (如果它是通过 CSS transform scale 应用的)
-            // 或者，我们可以临时创建一个不可见的克隆来测量，但这太重了。
-            // 既然我们知道 scale 是通过 var(--scale-factor) 应用的 transform，
-            // 我们尝试获取元素的 offsetHeight，然后除以当前的 globalScale.value 来还原原始尺寸。
-            // 但要注意 offsetHeight 返回的是整数。
-            
-            // 更可靠的方法：直接读取 CSS 变量可能不准，我们假设当前的 offsetHeight 是应用了 scale 后的。
-            // 但实际上 transform: scale() 不会改变 offsetHeight/Width 的返回值 (Layout size vs Render size).
-            // 在大多数浏览器中，transform 不改变 offsetWidth/Height 属性值，它们返回的是 layout 尺寸。
-            // 只有 getBoundingClientRect 会返回 render 尺寸。
-            // 所以直接用 offsetHeight 应该是原始尺寸。为了保险，我们做个校验。
-            
-            const currentScale = globalScale.value;
-            const rect = card0.getBoundingClientRect();
-            
-            // 如果 rect.height 明显大于 offsetHeight，说明 offsetHeight 是原始尺寸。
-            // 如果它们接近，说明 offsetHeight 已经是缩放后的（不太可能）。
-            // 这里的 H 应该是原始高度。
-            let H = card0.offsetHeight;
-            
-            // 如果 offsetHeight 不准确，我们可以用 rect.height / currentScale
-            if (Math.abs(rect.height - H * currentScale) < 5) {
-                 // 这是一个验证，如果成立，说明 offsetHeight 确实是原始高度
-            } else if (Math.abs(rect.height - H) < 5 && currentScale !== 1) {
-                 // 如果 rect.height 等于 offsetHeight 且 scale != 1，说明 offsetHeight 也是缩放后的？
-                 // 或者 transform 没生效？
-                 // 通常 transform 不影响 offsetHeight。我们暂且信任 offsetHeight。
-            }
 
-            // Use offsetWidth for dial diameter (assuming square/circle)
-            const dialRadius = dial.offsetWidth / 2;
-            
-            // 屏幕尺寸
-            const screenW = window.innerWidth;
-            const screenH = window.innerHeight;
-            const spaceX = screenW / 2;
-            const spaceY = screenH / 2;
-            
-            // 边距与间隙
-            // CSS 中定义的边距是 20px (bottom/right/top/left)
-            // 我们希望保留至少 5px 的间隙防止重叠
-            const margin = 20;
-            const gap = 5;
-            
-            // 公式推导：
-            // 由于我们有 offset 补偿逻辑 (updateCardPositionOffsets)，
-            // 卡片的视觉外边缘始终保持在距离屏幕边缘 margin (20px) 的位置。
-            // 因此，卡片中心距离屏幕中心的距离是：
-            // CenterPos = Space - (margin + VisualCardHeight / 2)
-            // 其中 VisualCardHeight = H * s
-            // CenterPos = Space - 20 - H * s / 2
-            //
-            // 碰撞检测：
-            // 卡片视觉内边缘不能碰到转盘。
-            // 卡片内边缘位置 = CenterPos - VisualCardHeight / 2
-            //               = Space - 20 - H * s / 2 - H * s / 2
-            //               = Space - 20 - H * s
-            // 转盘边缘位置 = DialRadius * s
-            //
-            // 条件：卡片内边缘 > 转盘边缘 + gap
-            // Space - 20 - H * s >= DialRadius * s + gap
-            // Space - 20 - gap >= s * (H + DialRadius)
-            // s <= (Space - 25) / (H + DialRadius)
-            
-            const limitX = (spaceX - margin - gap) / (H + dialRadius);
-            const limitY = (spaceY - margin - gap) / (H + dialRadius);
-            
-            // 取两者较小值
-            const calculatedMax = Math.min(limitX, limitY);
-            
-            // 确保不为负数（极小屏幕情况）
-            const safeMax = Math.max(0.5, calculatedMax);
-            
-            return Math.min(safeMax, absoluteMaxScale);
-        };
-        
-        // Calculate optimal scale based on screen size and card dimensions
-        const calculateOptimalScale = () => {
+        const syncScaleLimits = () => {
             const maxScale = calculateMaxScale();
-            // 直接使用计算出的最大安全值，或者稍微留一点点余地 (98%)
-            // 既然用户要求"最大"，我们可以直接用 maxScale，或者留极小的 buffer
-            return Math.min(maxScale * 0.98, absoluteMaxScale);
+            if (globalScale.value > maxScale) {
+                persistScale(maxScale);
+            }
+            canZoomIn.value = globalScale.value < maxScale - 0.01;
+            canZoomOut.value = globalScale.value > 0.5;
         };
 
-        // Legacy check function replaced by direct calculation
-        const checkCollision = (scale) => {
-            return scale > calculateMaxScale();
+        const applyScaleLimitsFromCache = (maxScale) => {
+            if (globalScale.value > maxScale) {
+                persistScale(maxScale);
+            }
+            canZoomIn.value = globalScale.value < maxScale - 0.01;
+            canZoomOut.value = globalScale.value > 0.5;
         };
+
+        const updateCardPositionOffsets = (scale) => {
+            requestAnimationFrame(() => {
+                applyCardOffsets(cardOffsetForScale(scale));
+            });
+        };
+
+        const fitLayoutToScreen = () => {
+            layoutReady.value = true;
+            invalidateLayoutMaxScale();
+            nextTick(() => {
+                requestAnimationFrame(() => {
+                    const maxScale = measureLayoutMaxScale();
+                    const optimal = optimalScaleFromMax(maxScale);
+                    persistScale(optimal);
+                    applyScaleLimitsFromCache(maxScale);
+                    updateCardPositionOffsets(globalScale.value);
+                });
+            });
+        };
+
+        const resetScaleAutoFit = () => {
+            scaleAutoFit.value = true;
+            localStorage.setItem('mj_scale_auto', '1');
+            fitLayoutToScreen();
+        };
+
+        const toggleScaleAutoFit = () => {
+            scaleAutoFit.value = !scaleAutoFit.value;
+            localStorage.setItem('mj_scale_auto', scaleAutoFit.value ? '1' : '0');
+            if (scaleAutoFit.value) fitLayoutToScreen();
+        };
+
+        const adjustScale = (direction) => {
+            scaleAutoFit.value = false;
+            localStorage.setItem('mj_scale_auto', '0');
+
+            const proposedScale = globalScale.value + (direction * scaleStep);
+            const maxScale = calculateMaxScale();
+
+            if (direction > 0) {
+                if (!canZoomIn.value) return;
+                if (proposedScale >= maxScale) {
+                    persistScale(maxScale);
+                    canZoomIn.value = false;
+                } else {
+                    persistScale(proposedScale);
+                    canZoomIn.value = globalScale.value < maxScale - 0.01;
+                }
+                canZoomOut.value = globalScale.value > 0.5;
+            } else {
+                if (!canZoomOut.value) return;
+                if (proposedScale < 0.5) {
+                    persistScale(0.5);
+                    canZoomOut.value = false;
+                } else {
+                    persistScale(proposedScale);
+                    canZoomOut.value = globalScale.value > 0.5;
+                }
+                canZoomIn.value = globalScale.value < maxScale - 0.01;
+            }
+        };
+
+        const initLayoutScale = () => {
+            layoutReady.value = true;
+            invalidateLayoutMaxScale();
+            requestAnimationFrame(() => {
+                if (scaleAutoFit.value || !localStorage.getItem('mj_scale')) {
+                    fitLayoutToScreen();
+                    return;
+                }
+                const saved = parseFloat(localStorage.getItem('mj_scale'));
+                const maxScale = measureLayoutMaxScale();
+                if (!Number.isNaN(saved) && saved >= 0.5) {
+                    persistScale(Math.min(saved, maxScale));
+                    applyScaleLimitsFromCache(maxScale);
+                } else {
+                    fitLayoutToScreen();
+                    return;
+                }
+                updateCardPositionOffsets(globalScale.value);
+            });
+        };
+
+        const handleLayoutResize = debounce(() => {
+            invalidateLayoutMaxScale();
+            if (scaleAutoFit.value) {
+                fitLayoutToScreen();
+            } else {
+                syncScaleLimits();
+                updateCardPositionOffsets(globalScale.value);
+            }
+        }, 120);
 
         const diceStyles = computed(() => {
             return diceRotation.value.map((rot) => {
@@ -412,6 +481,121 @@ createApp({
         // --- Computed ---
         const activePlayers = computed(() => seats.value.filter(n => n));
         const availablePlayers = computed(() => players.value.filter(p => !seats.value.includes(p.name)));
+        const seatPlayerCount = computed(() => playerCountForMode(gameMode.value));
+        const isRiichi = computed(() => isRiichiMode(gameMode.value));
+        const handLabel = computed(() => {
+            if (!isRiichi.value) return String(currentRound.value);
+            return formatHandLabel(roundWind.value, handNumber.value);
+        });
+        const gameModeLabel = computed(() => {
+            if (gameMode.value === 'riichi-4') return '立直四麻';
+            if (gameMode.value === 'sanma-3') return '三麻立直';
+            return '通用';
+        });
+        const visibleSeatIndices = computed(() => {
+            if (gameMode.value === 'sanma-3') return [0, 1, 2, 3];
+            const n = seatPlayerCount.value;
+            return Array.from({ length: n }, (_, i) => i);
+        });
+
+        const sanmaAbsentSeatIndex = computed(() => {
+            if (gameMode.value !== 'sanma-3') return null;
+            return sanmaAbsentSeat(seats.value);
+        });
+
+        const sanmaSeatedCount = computed(() =>
+            seats.value.filter(Boolean).length,
+        );
+
+        const isSanmaSeatLocked = (index) =>
+            gameMode.value === 'sanma-3'
+            && sanmaSeatedCount.value >= 3
+            && sanmaAbsentSeatIndex.value === index;
+
+        const compassLoopCount = computed(() =>
+            gameMode.value === 'sanma-3' ? 4 : seatPlayerCount.value,
+        );
+
+        const displayPosForSeat = (seatIndex) => seatIndex;
+
+        const getSeatWind = (seatIndex) => {
+            if (!seats.value[seatIndex]) return '';
+            return seatWindForSeat(
+                seatIndex,
+                dealerIndex.value,
+                seatPlayerCount.value,
+                gameMode.value === 'sanma-3' ? sanmaAbsentSeatIndex.value : null,
+            );
+        };
+
+        const COMPASS_NAMES = ['bottom', 'right', 'top', 'left'];
+        const compassName = (compassPos) => COMPASS_NAMES[compassPos] ?? 'bottom';
+
+        const seatIndexFromCard = (cardEl) => {
+            if (!cardEl) return null;
+            const raw = cardEl.dataset?.seatIndex;
+            if (raw == null || raw === '') return null;
+            const idx = parseInt(raw, 10);
+            return Number.isNaN(idx) ? null : idx;
+        };
+
+        const applyRoundAdvance = (advance) => {
+            dealerIndex.value = advance.dealerIndex;
+            if (advance.dealerStreakDelta === 1) {
+                dealerStreak.value++;
+            } else {
+                dealerStreak.value = 0;
+            }
+            honba.value = advance.honba;
+            roundWind.value = advance.roundWind;
+            handNumber.value = advance.handNumber;
+            currentRound.value++;
+            playerRiichi.value = [false, false, false, false];
+        };
+
+        const updateRiichiPreview = () => {
+            if (!riichiSettle.value.open || riichiSettle.value.winnerSeat == null) {
+                riichiSettle.value.preview = null;
+                return;
+            }
+            if (riichiSettle.value.yakuman && riichiSettle.value.fan < 1) return;
+            try {
+                const absentSeat = gameMode.value === 'sanma-3' ? sanmaAbsentSeatIndex.value : null;
+                if (gameMode.value === 'sanma-3' && absentSeat == null) {
+                    riichiSettle.value.preview = null;
+                    return;
+                }
+                const result = computeRiichiSettlement({
+                    gameMode: gameMode.value,
+                    winnerSeat: riichiSettle.value.winnerSeat,
+                    payerSeat: riichiSettle.value.winType === 'ron' ? riichiSettle.value.payerSeat : null,
+                    dealerIndex: dealerIndex.value,
+                    fan: riichiSettle.value.yakuman ? riichiSettle.value.fan : riichiSettle.value.fan,
+                    fu: riichiSettle.value.fu,
+                    yakuman: riichiSettle.value.yakuman,
+                    honba: honba.value,
+                    riichiSticks: riichiSticks.value,
+                    rule: riichiRule.value,
+                    absentSeat,
+                });
+                riichiSettle.value.preview = result;
+            } catch {
+                riichiSettle.value.preview = null;
+            }
+        };
+
+        watch(
+            () => [
+                riichiSettle.value.fan,
+                riichiSettle.value.fu,
+                riichiSettle.value.yakuman,
+                riichiSettle.value.open,
+                honba.value,
+                riichiSticks.value,
+                riichiRule.value.kiriageMangan,
+            ],
+            updateRiichiPreview,
+        );
         
         // Track rotation for smooth counter-clockwise animation
         // 目标角度映射：座位0=0°, 座位1=-90°, 座位2=-180°, 座位3=-270°
@@ -420,6 +604,7 @@ createApp({
         let previousDealerIndex = null;
         
         const dialRotation = computed(() => {
+            if (isRiichi.value) return 0;
             const targetIndex = dealerIndex.value;
             
             // 首次初始化：直接设置到正确位置，不需要动画
@@ -452,121 +637,34 @@ createApp({
         
         // --- Methods ---
         
-        // Watch for scale changes and update position offsets
         watch(globalScale, (newScale) => {
-            // 使用 nextTick 确保 Vue 已经更新了 DOM
+            nextTick(() => updateCardPositionOffsets(newScale));
+        });
+
+        watch([gameMode, isRiichi], () => {
+            invalidateLayoutMaxScale();
             nextTick(() => {
-                updateCardPositionOffsets(newScale);
+                if (scaleAutoFit.value) fitLayoutToScreen();
+                else syncScaleLimits();
             });
         });
-        
-        const updateCardPositionOffsets = (scale) => {
-            // 获取底部卡片(pos-0)来测量尺寸，因为它没有旋转
-            const card = document.querySelector('.pos-0');
-            if (!card) return;
-            
-            // 使用 requestAnimationFrame 确保浏览器已经应用了样式和缩放
-            requestAnimationFrame(() => {
-                // 再次使用 requestAnimationFrame 确保样式完全应用
-                requestAnimationFrame(() => {
-                    // 获取卡片的实际渲染尺寸（包含当前缩放）
-                    const rect = card.getBoundingClientRect();
-                    
-                    // 从 DOM 读取实际应用的缩放值（Vue 已经通过 :style 设置了）
-                    const appliedScale = parseFloat(getComputedStyle(card).getPropertyValue('--scale-factor')) || scale;
-                    
-                    // 计算原始尺寸（未缩放时）
-                    const originalHeight = rect.height / appliedScale;
-                    
-                    // 计算偏移量：当从1放大到scale时，需要移动 size * (scale - 1) / 2
-                    // pos-0和pos-2: 垂直方向使用原始height
-                    // pos-1和pos-3: 旋转90度后，水平方向使用原始height (旋转前的垂直尺寸)
-                    const offset = originalHeight * (appliedScale - 1) / 2;
-                    
-                    // 应用到所有玩家卡片
-                    const cards = document.querySelectorAll('.player-card');
-                    cards.forEach((c) => {
-                        c.style.setProperty('--offset-x', `${offset}px`);
-                        c.style.setProperty('--offset-y', `${offset}px`);
-                    });
-                });
-            });
-        };
         
         // Init
         onMounted(() => {
             loadState();
             initTheme();
-            
-            // 加载保存的缩放值，如果没有则自动计算
-            const savedScale = localStorage.getItem('mj_scale');
-            if (savedScale) {
-                const scale = parseFloat(savedScale);
-                // 确保缩放值在有效范围内
-                if (scale >= 0.5 && scale <= absoluteMaxScale) {
-                    globalScale.value = scale;
-                } else {
-                    // 如果保存的值无效，使用自动计算
-                    nextTick(() => {
-                        setTimeout(() => {
-                            const optimalScale = calculateOptimalScale();
-                            globalScale.value = optimalScale;
-                            localStorage.setItem('mj_scale', optimalScale.toString());
-                            // 更新按钮状态
-                            const maxScale = calculateMaxScale();
-                            canZoomIn.value = optimalScale < maxScale;
-                            canZoomOut.value = optimalScale > 0.5;
-                        }, 100);
-                    });
-                }
-            } else {
-                // 首次使用，自动计算合适的缩放比例
-                nextTick(() => {
-                    setTimeout(() => {
-                        const optimalScale = calculateOptimalScale();
-                        globalScale.value = optimalScale;
-                        localStorage.setItem('mj_scale', optimalScale.toString());
-                        
-                        // 立即更新偏移量，确保初次加载时位置正确
-                        updateCardPositionOffsets(optimalScale);
-                        
-                        // 更新按钮状态
-                        const maxScale = calculateMaxScale();
-                        canZoomIn.value = optimalScale < maxScale;
-                        canZoomOut.value = optimalScale > 0.5;
-                    }, 100);
-                });
+            initLayoutScale();
+            layoutResizeHandler = handleLayoutResize;
+            window.addEventListener('resize', layoutResizeHandler, { passive: true });
+            window.addEventListener('orientationchange', layoutResizeHandler, { passive: true });
+            const gameAreaEl = document.querySelector('.game-area');
+            if (gameAreaEl && typeof ResizeObserver !== 'undefined') {
+                layoutObserver = new ResizeObserver(handleLayoutResize);
+                layoutObserver.observe(gameAreaEl);
             }
-            
+
             requestWakeLock();
             
-            // 初始化位置偏移和按钮状态 - 使用多个 nextTick 和 setTimeout 确保 DOM 完全准备好
-            nextTick(() => {
-                // 等待 Vue 更新 DOM
-                nextTick(() => {
-                    // 再等待浏览器渲染
-                    setTimeout(() => {
-                        updateCardPositionOffsets(globalScale.value);
-                        // 初始化按钮状态
-                        const maxScale = calculateMaxScale();
-                        canZoomIn.value = globalScale.value < maxScale;
-                        canZoomOut.value = globalScale.value > 0.5;
-                    }, 150);
-                });
-            });
-            
-            // 监听窗口大小变化和方向变化，重新计算偏移量和缩放限制
-            const handleResize = () => {
-                updateCardPositionOffsets(globalScale.value);
-                // 重新计算缩放限制，更新按钮状态
-                const maxScale = calculateMaxScale();
-                canZoomIn.value = globalScale.value < maxScale;
-                canZoomOut.value = globalScale.value > 0.5;
-            };
-            
-            window.addEventListener('resize', handleResize);
-            // 移除 orientationchange 监听
-
             // Tutorial Check
             setTimeout(() => {
                 if (!localStorage.getItem('mj_tutorial_seen')) {
@@ -584,8 +682,7 @@ createApp({
         const toggleTheme = () => {
             isDark.value = !isDark.value;
             localStorage.setItem('mj_theme', isDark.value ? 'dark' : 'light');
-            if (isDark.value) document.body.classList.add('dark');
-            else document.body.classList.remove('dark');
+            document.body.classList.toggle('dark', isDark.value);
         };
 
         // Lock Toggle
@@ -604,7 +701,7 @@ createApp({
                 // 保存系统设置
                 localStorage.setItem('mj_theme', isDark.value ? 'dark' : 'light');
             }
-            if (isDark.value) document.body.classList.add('dark');
+            document.body.classList.toggle('dark', isDark.value);
         };
 
         // Data Persistence
@@ -615,24 +712,40 @@ createApp({
                 currentRound: currentRound.value,
                 dealerIndex: dealerIndex.value,
                 dealerStreak: dealerStreak.value,
-                history: history.value
+                history: history.value,
+                gameMode: gameMode.value,
+                roundWind: roundWind.value,
+                handNumber: handNumber.value,
+                honba: honba.value,
+                riichiSticks: riichiSticks.value,
+                startingScore: gameMode.value === 'sanma-3' ? 35000 : (gameMode.value === 'riichi-4' ? 25000 : 0),
+                rule: riichiRule.value,
+                initialDealerIndex: initialDealerIndex.value,
+                playerRiichi: playerRiichi.value,
             };
-            localStorage.setItem('mj_data_v3', JSON.stringify(state));
+            saveGameState(state);
         };
 
         const loadState = () => {
-            const saved = localStorage.getItem('mj_data_v3');
-            if (saved) {
-                const data = JSON.parse(saved);
+            const data = loadGameState();
+            if (data) {
                 players.value = (data.players || []).map(p => ({
                     ...p,
-                    origin: p.origin || 0 // 兼容旧数据，如果没有origin则设为0
+                    origin: p.origin || 0
                 }));
                 seats.value = data.seats || [null, null, null, null];
                 currentRound.value = data.currentRound || 1;
                 dealerIndex.value = data.dealerIndex || 0;
                 dealerStreak.value = data.dealerStreak || 0;
                 history.value = data.history || [];
+                gameMode.value = data.gameMode || 'generic';
+                roundWind.value = data.roundWind ?? 0;
+                handNumber.value = data.handNumber ?? 1;
+                honba.value = data.honba ?? 0;
+                riichiSticks.value = data.riichiSticks ?? 0;
+                riichiRule.value = data.rule || { kiriageMangan: false, kazoeYakuman: true, renchanMode: 2 };
+                initialDealerIndex.value = data.initialDealerIndex ?? data.dealerIndex ?? 0;
+                playerRiichi.value = data.playerRiichi || [false, false, false, false];
             }
         };
 
@@ -650,25 +763,465 @@ createApp({
             return p ? p.score : 0;
         };
 
-        const handleSeatClick = (index) => {
-            // Don't open seat modal if we just finished dragging
+        const handlePlayerCardClick = (index) => {
             if (dragState.value.dragging) return;
-            
+            if (!isRiichi.value || !seats.value[index]) {
+                handleSeatClick(index);
+                return;
+            }
+            if (isLocked.value) return;
+            openRiichiSettle('tsumo', index, null);
+        };
+
+        const handleSeatClick = (index) => {
+            if (dragState.value.dragging) return;
+            if (isSanmaSeatLocked(index)) return;
             activeSeatIndex.value = index;
             modals.value.seat = true;
+        };
+
+        const toggleRiichiStick = (seatIndex, event) => {
+            event?.stopPropagation();
+            if (!isRiichi.value || isLocked.value || !seats.value[seatIndex]) return;
+            const name = seats.value[seatIndex];
+            const p = players.value.find(pl => pl.name === name);
+            if (!p) return;
+
+            if (playerRiichi.value[seatIndex]) {
+                p.score += RIICHI_DEPOSIT;
+                playerRiichi.value[seatIndex] = false;
+                riichiSticks.value = Math.max(0, riichiSticks.value - 1);
+                history.value.unshift({
+                    time: Date.now(),
+                    round: currentRound.value,
+                    handLabel: handLabel.value,
+                    dealerIndex: dealerIndex.value,
+                    type: 'riichi-undeclare',
+                    seatIndex,
+                    playerName: name,
+                    amount: RIICHI_DEPOSIT,
+                    transactions: [],
+                });
+            } else {
+                if (getPlayerScore(name) < RIICHI_DEPOSIT) return;
+                p.score -= RIICHI_DEPOSIT;
+                playerRiichi.value[seatIndex] = true;
+                riichiSticks.value++;
+                history.value.unshift({
+                    time: Date.now(),
+                    round: currentRound.value,
+                    handLabel: handLabel.value,
+                    dealerIndex: dealerIndex.value,
+                    type: 'riichi-declare',
+                    seatIndex,
+                    playerName: name,
+                    amount: RIICHI_DEPOSIT,
+                    transactions: [],
+                });
+            }
+            saveState();
+        };
+
+        const settleRemainingRiichiSticksToDealer = () => {
+            if (riichiSticks.value <= 0) return 0;
+            const amount = riichiSticks.value * RIICHI_DEPOSIT;
+            const dealerName = seats.value[dealerIndex.value];
+            if (!dealerName) return 0;
+            const p = players.value.find(pl => pl.name === dealerName);
+            if (p) p.score += amount;
+            const sticks = riichiSticks.value;
+            riichiSticks.value = 0;
+            return sticks;
+        };
+
+        const endRiichiMatch = () => {
+            if (!isRiichi.value) return;
+            const sticks = settleRemainingRiichiSticksToDealer();
+            if (sticks > 0) {
+                history.value.unshift({
+                    time: Date.now(),
+                    round: currentRound.value,
+                    handLabel: handLabel.value,
+                    type: 'match-end-sticks',
+                    dealerIndex: dealerIndex.value,
+                    sticks,
+                    transactions: [],
+                });
+            }
+
+            const loopCount = compassLoopCount.value;
+            const entries = [];
+            for (let i = 0; i < loopCount; i++) {
+                const name = seats.value[i];
+                if (!name) continue;
+                entries.push({
+                    name,
+                    score: getPlayerScore(name),
+                    wind: getSeatWind(i),
+                    seatIndex: i,
+                });
+            }
+            entries.sort((a, b) => b.score - a.score);
+            matchEndRankings.value = entries.map((entry, index) => ({
+                ...entry,
+                rank: index + 1,
+            }));
+            matchEndSticksNote.value = sticks > 0
+                ? `桌上 ${sticks} 根供托（${sticks * RIICHI_DEPOSIT} 点）已归当前庄家 ${seats.value[dealerIndex.value] ?? ''}。`
+                : '';
+            modals.value.matchEnd = true;
+            saveState();
+        };
+
+        const openRiichiSettle = (winType, winnerSeat, payerSeat) => {
+            const session = {
+                gameMode: gameMode.value,
+                roundWind: roundWind.value,
+                handNumber: handNumber.value,
+                honba: honba.value,
+                riichiSticks: riichiSticks.value,
+            };
+            const { detail } = buildWinSummary(
+                session,
+                winnerSeat,
+                dealerIndex.value,
+                seats.value,
+                winType === 'tsumo',
+                payerSeat,
+            );
+            riichiSettle.value = {
+                open: true,
+                winType,
+                winnerSeat,
+                payerSeat,
+                fan: 1,
+                fu: 30,
+                yakuman: false,
+                preview: null,
+                summary: detail,
+            };
+            modals.value.riichiSettle = true;
+            nextTick(updateRiichiPreview);
+        };
+
+        const closeRiichiSettle = () => {
+            modals.value.riichiSettle = false;
+            riichiSettle.value.open = false;
+        };
+
+        const applyScorePreset = (preset) => {
+            riichiSettle.value.fan = preset.fan;
+            riichiSettle.value.fu = preset.fu;
+            riichiSettle.value.yakuman = !!preset.yakuman;
+            updateRiichiPreview();
+        };
+
+        const adjustRiichiFan = (delta) => {
+            const rs = riichiSettle.value;
+            if (delta > 0) {
+                if (rs.yakuman) {
+                    if (rs.fan < MAX_YAKUMAN) rs.fan += 1;
+                } else if (rs.fan >= MAX_FAN) {
+                    rs.yakuman = true;
+                    rs.fan = 1;
+                } else {
+                    rs.fan += 1;
+                }
+            } else if (rs.yakuman) {
+                if (rs.fan <= 1) {
+                    rs.yakuman = false;
+                    rs.fan = MAX_FAN;
+                } else {
+                    rs.fan -= 1;
+                }
+            } else {
+                rs.fan = Math.max(0, rs.fan - 1);
+            }
+            updateRiichiPreview();
+        };
+
+        const stepRiichiFu = (delta) => {
+            let idx = FU_STEPS.indexOf(riichiSettle.value.fu);
+            if (idx === -1) {
+                idx = FU_STEPS.findIndex((s) => s >= riichiSettle.value.fu);
+                if (idx === -1) idx = FU_STEPS.length - 1;
+            }
+            idx = Math.max(0, Math.min(FU_STEPS.length - 1, idx + delta));
+            riichiSettle.value.fu = FU_STEPS[idx];
+            updateRiichiPreview();
+        };
+
+        const setRiichiFu = (fu) => {
+            riichiSettle.value.fu = fu;
+            updateRiichiPreview();
+        };
+
+        const riichiScoreTierLabel = computed(() => {
+            const rs = riichiSettle.value;
+            return formatScoreTierLabel(rs.fan, rs.fu, rs.yakuman, riichiRule.value);
+        });
+
+        const isRiichiPresetActive = (preset) =>
+            isScorePresetActive(preset, riichiSettle.value);
+
+        const confirmRiichiSettle = () => {
+            const rs = riichiSettle.value;
+            if (rs.winnerSeat == null) return;
+            const absentSeat = gameMode.value === 'sanma-3' ? sanmaAbsentSeatIndex.value : null;
+            if (gameMode.value === 'sanma-3' && absentSeat == null) {
+                alert('三麻需坐满 3 人才能结算');
+                return;
+            }
+            let result;
+            try {
+                result = computeRiichiSettlement({
+                    gameMode: gameMode.value,
+                    winnerSeat: rs.winnerSeat,
+                    payerSeat: rs.winType === 'ron' ? rs.payerSeat : null,
+                    dealerIndex: dealerIndex.value,
+                    fan: rs.yakuman ? rs.fan : rs.fan,
+                    fu: rs.fu,
+                    yakuman: rs.yakuman,
+                    honba: honba.value,
+                    riichiSticks: riichiSticks.value,
+                    rule: riichiRule.value,
+                    absentSeat,
+                });
+            } catch (e) {
+                alert(e.message || '算点失败');
+                return;
+            }
+
+            const loopCount = compassLoopCount.value;
+            const deltas = result.physicalDeltas;
+            const diffByName = {};
+            const transactions = buildPairwiseFromDeltas(deltas, seats.value, loopCount);
+
+            for (let i = 0; i < loopCount; i++) {
+                const name = seats.value[i];
+                if (!name || deltas[i] === 0) continue;
+                const p = players.value.find(pl => pl.name === name);
+                if (p) p.score += deltas[i];
+                diffByName[name] = deltas[i];
+            }
+
+            const snapshotHonba = honba.value;
+            const snapshotSticks = riichiSticks.value;
+            const snapshotDealer = dealerIndex.value;
+            const snapshotStreak = dealerStreak.value;
+            const snapshotRoundWind = roundWind.value;
+            const snapshotHand = handNumber.value;
+
+            history.value.unshift({
+                time: Date.now(),
+                round: currentRound.value,
+                handLabel: handLabel.value,
+                dealerIndex: dealerIndex.value,
+                type: 'riichi-win',
+                winType: rs.winType,
+                winnerSeat: rs.winnerSeat,
+                payerSeat: rs.payerSeat,
+                fan: rs.yakuman ? undefined : rs.fan,
+                fu: rs.fu,
+                yakuman: rs.yakuman,
+                yakumanLevel: rs.yakuman ? rs.fan : undefined,
+                fenpei: [...deltas],
+                transactions,
+                sessionBefore: {
+                    honba: snapshotHonba,
+                    riichiSticks: snapshotSticks,
+                    dealerIndex: snapshotDealer,
+                    dealerStreak: snapshotStreak,
+                    roundWind: snapshotRoundWind,
+                    handNumber: snapshotHand,
+                    playerRiichi: [...playerRiichi.value],
+                },
+            });
+
+            lastDiff.value = diffByName;
+            setTimeout(() => { lastDiff.value = {}; }, 3000);
+
+            riichiSticks.value = 0;
+            const advance = advanceAfterWin({
+                gameMode: gameMode.value,
+                winnerSeat: rs.winnerSeat,
+                dealerIndex: dealerIndex.value,
+                honba: honba.value,
+                roundWind: roundWind.value,
+                handNumber: handNumber.value,
+                renchanMode: riichiRule.value.renchanMode ?? 2,
+                absentSeat,
+            });
+
+            applyRoundAdvance(advance);
+            closeRiichiSettle();
+            saveState();
+        };
+
+        const buildPairwiseFromDeltas = (deltas, seatNames, loopCount) => {
+            const txs = [];
+            let winnerIdx = -1;
+            for (let i = 0; i < loopCount; i++) {
+                if ((deltas[i] ?? 0) > 0) winnerIdx = i;
+            }
+            if (winnerIdx < 0) return txs;
+            const winnerName = seatNames[winnerIdx];
+            for (let i = 0; i < loopCount; i++) {
+                if (i === winnerIdx) continue;
+                const loss = -(deltas[i] ?? 0);
+                if (loss > 0 && seatNames[i]) {
+                    txs.push({ from: seatNames[i], to: winnerName, amount: loss });
+                }
+            }
+            return txs;
+        };
+
+        const setGameMode = (mode) => {
+            if (mode === gameMode.value) return;
+            const hasData = history.value.length > 0 || activePlayers.value.length > 0;
+            if (hasData && !confirm('切换模式可能影响场况显示，是否继续？')) return;
+            gameMode.value = mode;
+            if (isRiichiMode(mode)) {
+                const defaults = defaultRiichiSession(mode);
+                roundWind.value = defaults.roundWind;
+                handNumber.value = defaults.handNumber;
+                honba.value = defaults.honba;
+                riichiSticks.value = defaults.riichiSticks;
+                riichiRule.value = { ...defaults.rule };
+                initialDealerIndex.value = dealerIndex.value;
+                playerRiichi.value = [false, false, false, false];
+                players.value.forEach(p => {
+                    p.origin = defaults.startingScore;
+                });
+            }
+            saveState();
+        };
+
+        const openRyukyoku = () => {
+            if (!isRiichi.value) return;
+            ryukyokuNoten.value = Array.from({ length: 4 }, () => false);
+            modals.value.ryukyoku = true;
+        };
+
+        const setRyukyokuTenpai = (seatIndex, tenpai) => {
+            ryukyokuNoten.value[seatIndex] = !tenpai;
+        };
+
+        const setAllRyukyokuTenpai = (tenpai) => {
+            const loopCount = compassLoopCount.value;
+            for (let i = 0; i < loopCount; i++) {
+                if (seats.value[i]) ryukyokuNoten.value[i] = !tenpai;
+            }
+        };
+
+        const ryukyokuPreviewDeltas = computed(() => {
+            if (!modals.value.ryukyoku) return null;
+            const pc = seatPlayerCount.value;
+            const absentSeat = gameMode.value === 'sanma-3' ? sanmaAbsentSeatIndex.value : null;
+            return notenPenaltyDeltas(
+                pc,
+                dealerIndex.value,
+                ryukyokuNoten.value,
+                absentSeat,
+            );
+        });
+
+        const ryukyokuHasPenalty = computed(() => {
+            const deltas = ryukyokuPreviewDeltas.value;
+            return deltas != null && deltas.some((d) => d !== 0);
+        });
+
+        const ryukyokuDealerTenpai = computed(() => !ryukyokuNoten.value[dealerIndex.value]);
+
+        const confirmRyukyoku = () => {
+            const pc = seatPlayerCount.value;
+            const loopCount = compassLoopCount.value;
+            const absentSeat = gameMode.value === 'sanma-3' ? sanmaAbsentSeatIndex.value : null;
+            if (gameMode.value === 'sanma-3' && absentSeat == null) {
+                alert('三麻需坐满 3 人才能流局');
+                return;
+            }
+            const snapshotHonba = honba.value;
+            const snapshotSticks = riichiSticks.value;
+            const snapshotDealer = dealerIndex.value;
+            const snapshotStreak = dealerStreak.value;
+            const snapshotRoundWind = roundWind.value;
+            const snapshotHand = handNumber.value;
+
+            const deltas = notenPenaltyDeltas(
+                pc,
+                dealerIndex.value,
+                ryukyokuNoten.value,
+                absentSeat,
+            );
+            const diffByName = {};
+            const transactions = buildPairwiseFromDeltas(deltas, seats.value, loopCount);
+
+            for (let i = 0; i < loopCount; i++) {
+                const name = seats.value[i];
+                if (!name || deltas[i] === 0) continue;
+                const p = players.value.find(pl => pl.name === name);
+                if (p) p.score += deltas[i];
+                diffByName[name] = deltas[i];
+            }
+
+            const adv = advanceAfterRyukyoku({
+                gameMode: gameMode.value,
+                dealerIndex: dealerIndex.value,
+                roundWind: roundWind.value,
+                handNumber: handNumber.value,
+                honba: honba.value,
+                dealerTenpai: !ryukyokuNoten.value[dealerIndex.value],
+                renchanMode: riichiRule.value.renchanMode ?? 2,
+                absentSeat,
+            });
+
+            history.value.unshift({
+                time: Date.now(),
+                round: currentRound.value,
+                handLabel: handLabel.value,
+                dealerIndex: dealerIndex.value,
+                type: 'ryukyoku',
+                noten: ryukyokuNoten.value.slice(0, loopCount),
+                dealerTenpai: !ryukyokuNoten.value[dealerIndex.value],
+                fenpei: deltas,
+                transactions,
+                sessionBefore: {
+                    honba: snapshotHonba,
+                    riichiSticks: snapshotSticks,
+                    dealerIndex: snapshotDealer,
+                    dealerStreak: snapshotStreak,
+                    roundWind: snapshotRoundWind,
+                    handNumber: snapshotHand,
+                    playerRiichi: [...playerRiichi.value],
+                },
+            });
+
+            lastDiff.value = diffByName;
+            setTimeout(() => { lastDiff.value = {}; }, 3000);
+            modals.value.ryukyoku = false;
+            applyRoundAdvance(adv);
+            saveState();
         };
 
         const addNewPlayer = () => {
             const name = newPlayerName.value.trim();
             if (!name) return;
             if (players.value.some(p => p.name === name)) return alert('玩家已存在');
-            players.value.push({ name, score: 0, origin: 0 });
+            const origin = isRiichiMode(gameMode.value)
+                ? startingScoreForMode(gameMode.value)
+                : 0;
+            players.value.push({ name, score: 0, origin });
             newPlayerName.value = '';
             saveState();
         };
 
         const sitDown = (name) => {
             seats.value[activeSeatIndex.value] = name;
+            const p = players.value.find(pl => pl.name === name);
+            if (p && isRiichi.value && !p.origin) {
+                p.origin = startingScoreForMode(gameMode.value);
+            }
             closeModal('seat');
             saveState();
         };
@@ -744,6 +1297,7 @@ createApp({
                 time: Date.now(),
                 round: currentRound.value,
                 dealerIndex: dealerIndex.value,
+                type: 'manual',
                 transactions: [{ from: settleFrom.value, to: settleTo.value, amount }]
             });
 
@@ -793,6 +1347,12 @@ createApp({
 
         onUnmounted(() => {
             window.removeEventListener('keydown', handleKeydown);
+            if (layoutResizeHandler) {
+                window.removeEventListener('resize', layoutResizeHandler);
+                window.removeEventListener('orientationchange', layoutResizeHandler);
+                layoutObserver?.disconnect();
+                layoutObserver = null;
+            }
         });
 
         const undo = () => {
@@ -800,12 +1360,48 @@ createApp({
             if (!confirm('确定撤销上一次结算？')) return;
 
             const last = history.value.shift();
-            last.transactions.forEach(t => {
-                const fromP = players.value.find(p => p.name === t.from);
-                const toP = players.value.find(p => p.name === t.to);
-                if (fromP) fromP.score += t.amount;
-                if (toP) toP.score -= t.amount;
-            });
+            const pc = seatPlayerCount.value;
+
+            if (last.type === 'riichi-declare') {
+                const name = last.playerName;
+                const p = players.value.find(pl => pl.name === name);
+                if (p) p.score += last.amount;
+                playerRiichi.value[last.seatIndex] = false;
+                riichiSticks.value = Math.max(0, riichiSticks.value - 1);
+            } else if (last.type === 'riichi-undeclare') {
+                const name = last.playerName;
+                const p = players.value.find(pl => pl.name === name);
+                if (p) p.score -= last.amount;
+                playerRiichi.value[last.seatIndex] = true;
+                riichiSticks.value++;
+            } else if (last.fenpei && (last.type === 'riichi-win' || last.type === 'ryukyoku')) {
+                const loopCount = compassLoopCount.value;
+                for (let i = 0; i < loopCount; i++) {
+                    const name = seats.value[i];
+                    if (!name) continue;
+                    const p = players.value.find(pl => pl.name === name);
+                    if (p) p.score -= last.fenpei[i] ?? 0;
+                }
+                if (last.sessionBefore) {
+                    honba.value = last.sessionBefore.honba;
+                    riichiSticks.value = last.sessionBefore.riichiSticks;
+                    dealerIndex.value = last.sessionBefore.dealerIndex;
+                    dealerStreak.value = last.sessionBefore.dealerStreak;
+                    roundWind.value = last.sessionBefore.roundWind;
+                    handNumber.value = last.sessionBefore.handNumber;
+                    if (last.sessionBefore.playerRiichi) {
+                        playerRiichi.value = [...last.sessionBefore.playerRiichi];
+                    }
+                    currentRound.value = Math.max(1, currentRound.value - 1);
+                }
+            } else if (last.transactions) {
+                last.transactions.forEach(t => {
+                    const fromP = players.value.find(p => p.name === t.from);
+                    const toP = players.value.find(p => p.name === t.to);
+                    if (fromP) fromP.score += t.amount;
+                    if (toP) toP.score -= t.amount;
+                });
+            }
             saveState();
         };
 
@@ -849,6 +1445,9 @@ createApp({
                     // 至少有一个玩家没有入座：只指定庄家位置，不增加局数
                     dealerIndex.value = targetIndex;
                     dealerStreak.value = 0;
+                    if (gameMode.value === 'sanma-3') {
+                        initialDealerIndex.value = targetIndex;
+                    }
                     saveState();
                 } else {
                     const seat = seats.value[targetIndex];
@@ -948,6 +1547,9 @@ createApp({
                     // 至少有一个玩家没有入座：只指定庄家位置，不增加局数
                     dealerIndex.value = targetIndex;
                     dealerStreak.value = 0;
+                    if (gameMode.value === 'sanma-3') {
+                        initialDealerIndex.value = targetIndex;
+                    }
                     saveState();
                 } else {
                     const seat = seats.value[targetIndex];
@@ -1243,14 +1845,12 @@ createApp({
             
             // Find which card is under the touch point
             const element = document.elementFromPoint(touch.clientX, touch.clientY);
-            const card = element?.closest('.player-card');
+            const card = element?.closest('.player-card[data-seat-index]');
             
             if (card) {
-                // Find the index of this card among all player cards
-                const allCards = document.querySelectorAll('.player-card');
-                const cardIndex = Array.from(allCards).indexOf(card);
+                const cardIndex = seatIndexFromCard(card);
                 
-                if (cardIndex !== -1 && cardIndex !== dragState.value.fromIndex) {
+                if (cardIndex != null && cardIndex !== dragState.value.fromIndex) {
                     const seat = seats.value[cardIndex];
                     if (seat) {
                         dragState.value.overIndex = cardIndex;
@@ -1288,13 +1888,24 @@ createApp({
                     openQuickSettle(fromSeat, toSeat);
                 }
             } else {
-                // Reset drag state
+                const tapIndex = fromIndex;
                 handleDragEnd();
+                if (tapIndex != null && seats.value[tapIndex] && isRiichi.value && !isLocked.value) {
+                    openRiichiSettle('tsumo', tapIndex, null);
+                }
             }
         };
 
         // Quick Settle Modal
         const openQuickSettle = (from, to) => {
+            if (isRiichi.value) {
+                const fromIndex = seats.value.indexOf(from);
+                const toIndex = seats.value.indexOf(to);
+                if (fromIndex >= 0 && toIndex >= 0) {
+                    openRiichiSettle('ron', toIndex, fromIndex);
+                }
+                return;
+            }
             settleFrom.value = from;
             settleTo.value = to;
             settleAmount.value = '';
@@ -1316,8 +1927,20 @@ createApp({
             if (!settled && !confirm('本局尚未结算，确定进入下一局？')) return;
             
             // 直接换庄到下一家
-            dealerIndex.value = (dealerIndex.value + 1) % 4;
+            const pc = seatPlayerCount.value;
+            dealerIndex.value = (dealerIndex.value + 1) % pc;
             dealerStreak.value = 0;
+            if (isRiichi.value) {
+                let hn = handNumber.value + 1;
+                let rw = roundWind.value;
+                if (hn > 4) {
+                    hn = 1;
+                    rw = (rw + 1) % 4;
+                }
+                handNumber.value = hn;
+                roundWind.value = rw;
+                honba.value = 0;
+            }
             currentRound.value++;
             saveState();
         };
@@ -1336,8 +1959,9 @@ createApp({
         
         const clearData = () => {
             if (confirm('确定清空所有数据？')) {
-                localStorage.removeItem('mj_data_v3');
-                localStorage.removeItem('mj_scale'); // Clear saved scale
+                clearGameStorage();
+                localStorage.removeItem('mj_scale');
+                localStorage.removeItem('mj_scale_auto');
                 location.reload();
             }
         };
@@ -1646,7 +2270,7 @@ createApp({
                     plugins: {
                         legend: { 
                             labels: { 
-                                color: isDark.value ? '#fff' : '#333',
+                                color: isDark.value ? '#f9fafb' : '#1f2937',
                                 usePointStyle: true,
                                 pointStyle: 'rect',
                                 padding: 12,
@@ -1661,10 +2285,10 @@ createApp({
                         }
                     },
                     scales: {
-                        x: { ticks: { color: isDark.value ? '#aaa' : '#666' }, grid: { color: isDark.value ? '#333' : '#ddd' } },
-                        y: { 
-                            ticks: { 
-                                color: isDark.value ? '#aaa' : '#666',
+                        x: { ticks: { color: isDark.value ? '#9ca3af' : '#6b7280' }, grid: { color: isDark.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' } },
+                        y: {
+                            ticks: {
+                                color: isDark.value ? '#9ca3af' : '#6b7280',
                                 // 只显示整数，不显示小数
                                 callback: function(value) {
                                     if (Math.floor(value) === value) {
@@ -1672,7 +2296,7 @@ createApp({
                                     }
                                 }
                             }, 
-                            grid: { color: isDark.value ? '#333' : '#ddd' } 
+                            grid: { color: isDark.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }
                         }
                     }
                 }
@@ -1695,18 +2319,31 @@ createApp({
             isDark, toggleTheme,
             isLocked, toggleLock,
             seats, players, currentRound, dealerIndex, dealerStreak, history, lastDiff,
+            gameMode, gameModeLabel, isRiichi, handLabel, honba, riichiSticks, riichiRule,
+            visibleSeatIndices, seatPlayerCount, playerRiichi,
+            sanmaAbsentSeatIndex, sanmaSeatedCount, isSanmaSeatLocked, compassLoopCount,
+            displayPosForSeat, getSeatWind, compassName,
             modals, closeModal,
             activePlayers, availablePlayers, dialRotation,
-            getPlayerScore, getPlayerCurrentScore, handleSeatClick, addNewPlayer, sitDown, newPlayerName,
+            getPlayerScore, getPlayerCurrentScore, handleSeatClick, handlePlayerCardClick,
+            addNewPlayer, sitDown, newPlayerName,
             openSettleModal, settleFrom, settleTo, settleAmount, selectingFrom, isSelecting, errorFrom, errorTo, selectSettlePlayer, confirmSettle, amountInput, handleSelectBoxClick,
             appendNumber, backspaceNumber,
             undo, handleNextRoundClick, nextRoundCheck, nextRound,
-            formatTime, clearData,
+            formatTime, clearData, setGameMode,
+            openRyukyoku, setRyukyokuTenpai, setAllRyukyokuTenpai, confirmRyukyoku,
+            ryukyokuNoten, ryukyokuDealerTenpai, ryukyokuPreviewDeltas, ryukyokuHasPenalty,
+            toggleRiichiStick, endRiichiMatch, RIICHI_DEPOSIT,
+            matchEndRankings, matchEndSticksNote,
+            riichiSettle, SCORE_PRESETS, FU_HINTS, formatYakumanLabel,
+            applyScorePreset, adjustRiichiFan, stepRiichiFu, setRiichiFu,
+            riichiScoreTierLabel, isRiichiPresetActive,
+            confirmRiichiSettle, closeRiichiSettle, updateRiichiPreview,
             showStats, showHistory: () => modals.value.history = true, showSettings: () => modals.value.settings = true, showRoundModal: () => {},
             showHelp: () => modals.value.help = true,
             showOriginSet, updateOrigin, setOriginToZero, standUp,
             // Zoom
-            adjustScale, globalScale, canZoomIn, canZoomOut,
+            adjustScale, resetScaleAutoFit, toggleScaleAutoFit, globalScale, canZoomIn, canZoomOut, layoutReady, scaleAutoFit,
             // Drag and Drop (Player Cards)
             dragState,
             handleDragStart, handleDragEnd, handleDragOver, handleDragLeave, handleDrop,
